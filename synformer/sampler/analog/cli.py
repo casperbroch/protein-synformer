@@ -1,7 +1,7 @@
 import pathlib
 
 import click
-from parallel import run_parallel_sampling
+from synformer.sampler.analog.parallel import run_parallel_sampling
 
 from synformer.chem.mol import Molecule, read_mol_file
 
