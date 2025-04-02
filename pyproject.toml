@@ -11,8 +11,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version", "dependencies"]
 
-[tool.setuptools]
-packages = ["synformer"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["synformer*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "synformer.__version__"}
