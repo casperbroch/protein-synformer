@@ -1,3 +1,5 @@
+import torch
+print(torch.cuda.is_available(), torch.cuda.device_count(), torch.cuda.get_device_name(0))
 import os
 
 import click
@@ -78,12 +80,14 @@ def main(
         },
     )
 
+    strategy = strategies.DDPStrategy(static_graph=True, process_group_backend="gloo") if devices > 1 else "auto"
+
     # Train
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=devices,
         num_nodes=num_nodes,
-        strategy=strategies.DDPStrategy(static_graph=True),
+        strategy=strategy,
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
         log_every_n_steps=1,

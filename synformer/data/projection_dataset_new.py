@@ -152,6 +152,7 @@ class ProjectionDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self):
+        use_workers = self.num_workers > 0
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
@@ -159,7 +160,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             drop_last=True,
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
-            persistent_workers=True,
+            persistent_workers=use_workers,
         )
 
     def val_dataloader(self):

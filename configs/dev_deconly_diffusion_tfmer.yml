@@ -2,11 +2,11 @@ chem:
   fp_option:
     type: morgan
     morgan_radius: 2
-    morgan_n_bits: 256
-  building_block_path: data/building_blocks/Enamine_Rush-Delivery_Building_Blocks-US_223244cmpd_20231001.sdf
+    morgan_n_bits: 2048
+  building_block_path: data/building_blocks/Enamine_Rush-Delivery_Building_Blocks-US_253345cmpd_20250212.sdf
   reaction_path: data/rxn_templates/comprehensive.txt
-  rxn_matrix: data/processed/comp_256/matrix.pkl
-  fpindex: data/processed/comp_256/fpindex.pkl
+  rxn_matrix: data/processed/comp_2048/matrix.pkl
+  fpindex: data/processed/comp_2048/fpindex.pkl
 
 data:
   init_stack_weighted_ratio: 0.90
