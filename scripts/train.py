@@ -80,6 +80,17 @@ def main(
         },
     )
 
+    if resume:
+        ckpt = torch.load(resume, map_location="cpu")
+        state = ckpt["state_dict"]
+        filtered = {
+            k: v
+            for k, v in state.items()
+            if k.startswith("model.decoder.") or k.startswith("model.fingerprint_head.")
+        }
+        model.load_state_dict(filtered, strict=False)
+        resume = None
+
     strategy = strategies.DDPStrategy(static_graph=True, process_group_backend="gloo") if devices > 1 else "auto"
 
     # Train
@@ -102,7 +113,7 @@ def main(
         val_check_interval=config.train.val_freq,
         limit_val_batches=4,
     )
-    trainer.fit(model, datamodule=datamodule, ckpt_path=resume)
+    trainer.fit(model, datamodule=datamodule)
 
 
 if __name__ == "__main__":

@@ -2,11 +2,11 @@ chem:
   fp_option:
     type: morgan
     morgan_radius: 2
-    morgan_n_bits: 256
+    morgan_n_bits: 2048
   building_block_path: data/building_blocks/Enamine_Rush-Delivery_Building_Blocks-US_253345cmpd_20250212.sdf
   reaction_path: data/rxn_templates/comprehensive.txt
-  rxn_matrix: data/processed/comp_256/matrix.pkl
-  fpindex: data/processed/comp_256/fpindex.pkl
+  rxn_matrix: data/processed/comp_2048/matrix.pkl
+  fpindex: data/processed/comp_2048/fpindex.pkl
 
 data:
   init_stack_weighted_ratio: 0.90
@@ -14,27 +14,27 @@ data:
 model:
   encoder_type: none
   encoder:
-    d_model: 512
+    d_model: 768           # not used, but kept for consistency
   decoder:
-    d_model: 512
+    d_model: 768           # matches the 229 M model
     nhead: 16
-    dim_feedforward: 2048
-    num_layers: 8
+    dim_feedforward: 4096
+    num_layers: 10         # 10 decoder layers
     pe_max_len: 32
     output_norm: false
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
     num_reaction_classes: 120
+
   fingerprint_head_type: diffusion_transformer
   fingerprint_head:
-    d_model: 512
+    d_model: 768
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
     diffusion_steps: 100
     diffusion_s: 0.01
-    # Transformer should be larger for decoder-only setting
     n_bits_per_word: 16
     nhead: 16
-    dim_feedforward: 2048
-    num_layers: 6
+    dim_feedforward: 4096
+    num_layers: 6          # same as ED‐style head
     norm: false
     num_training_fingerprints_per_sample: 1
     enable_gradient_checkpointing: false
@@ -44,11 +44,11 @@ train:
     token: 1.0
     reaction: 1.0
     fingerprint_diffusion: 0.5
-    fingerprint_bce: 0.0  # For monitoring purpose only
+    fingerprint_bce: 0.0
   val_loss_weights:
     token: 1.0
     reaction: 1.0
-    fingerprint_diffusion: 0.0  # Multinomial diffusion loss does not drop
+    fingerprint_diffusion: 0.0
     fingerprint_bce: 0.5
   max_iters: 1_000_000
   val_freq: 5000
