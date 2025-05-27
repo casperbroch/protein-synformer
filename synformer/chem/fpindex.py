@@ -29,7 +29,10 @@ def _fill_fingerprint(
     molecules: Iterable[Molecule],
     fp_option: FingerprintOption,
 ):
-    os.sched_setaffinity(0, range(os.cpu_count() or 1))
+    try:
+        os.sched_setaffinity(0, range(os.cpu_count() or 1))
+    except AttributeError:
+        pass
     for i, mol in enumerate(molecules):
         fp[offset + i] = mol.get_fingerprint(fp_option).astype(np.uint8)
 
