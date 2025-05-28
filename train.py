@@ -15,12 +15,6 @@ from synformer.utils.misc import (
 )
 from synformer.utils.vc import get_vc_info
 
-'''
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-torch.set_float32_matmul_precision("medium")
-'''
-
 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
@@ -55,11 +49,14 @@ def main(
     config = OmegaConf.load(config_path)
     config_name = get_config_name(config_path)
     vc_info = get_vc_info()
-    '''
     vc_info.disallow_changes(debug)
-    '''
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
     exp_ver = get_experiment_version()
+
+    if config.system.device in ("gpu", "cuda"):
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision("medium")
 
     # Add flags (click options) to config
     config.train.exp_name = exp_name
@@ -92,7 +89,6 @@ def main(
             "resume": resume,
         },
     )
-
     # print(model)
 
     # Train
@@ -100,7 +96,7 @@ def main(
         accelerator=config.system.device, 
         devices=devices,
         num_nodes=num_nodes,
-        # strategy=strategies.DDPStrategy(static_graph=True),
+        # strategy=strategies.DDPStrategy(static_graph=True),  # ??
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
         log_every_n_steps=1,

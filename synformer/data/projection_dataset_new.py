@@ -114,7 +114,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                     else np.zeros(self._fp_option.morgan_n_bits) 
                     for reactant_idx in reactant_indices 
                 ]))
-                protein_embeddings = self._protein_embeddings[protein_id]
+                protein_embeddings = self._protein_embeddings[protein_id].to(torch.float32)
                 token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
                 """
                 Printing some examples and shapes from original data for reference:

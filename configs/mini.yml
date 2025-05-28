@@ -1,7 +1,7 @@
-system:
-  device: cpu
-
 # mini config for quick testing purposes
+system:
+  device: cpu  # [cpu, gpu, tpu]
+
 chem:
   fp_option:
     type: morgan

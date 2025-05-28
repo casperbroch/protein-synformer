@@ -1,5 +1,5 @@
 system:
-  device: cpu  # e.g. gpu, cpu
+  device: cpu  # [cpu, gpu, tpu]
 
 chem:
   fp_option:
@@ -20,11 +20,12 @@ chem:
 data:
   init_stack_weighted_ratio: 0.90
 
+# TODO: use exactly those settings as sf_ed_default.ckpt
 model:
   # !!
   encoder_type: protein 
   encoder:
-    d_model: 960  # ESM num embedding dimensions
+    d_model: 1152  # ESM num embedding dimensions
   # !!
   decoder:
     d_model: 768
