@@ -27,16 +27,18 @@ from .common import ProjectionBatch, ProjectionData  #, create_data
 
 class Collater:
     def __init__(self, 
+                 max_protein_len: int = 10000,  # not sure what value makes sense here, if any
                  # max_num_atoms: int = 96, 
                  # max_smiles_len: int = 192, 
                  max_num_tokens: int = 24):
         super().__init__()
+        self.max_protein_len = max_protein_len
         # self.max_num_atoms = max_num_atoms
         # self.max_smiles_len = max_smiles_len
         self.max_num_tokens = max_num_tokens
         self.spec_protein = {
-            "protein": collate_1d_features,  # ???
-            "protein_padding_mask": collate_padding_masks, 
+            "protein_embeddings": collate_1d_features,  # not sure if collate_1d_features is the correct one
+            # "protein_padding_mask": collate_padding_masks,  # currently not used
         }
         """
         self.spec_atoms = {
@@ -54,7 +56,6 @@ class Collater:
         }
 
     def __call__(self, data_list: list[ProjectionData]) -> ProjectionBatch:
-        print("Collater.__call__()")
         data_list_t = cast(list[dict[str, torch.Tensor]], data_list)
         batch = {
             **apply_collate(self.spec_protein, data_list_t, max_size=self.max_protein_len),
@@ -113,6 +114,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                     for reactant_idx in reactant_indices 
                 ]))
                 protein_embeddings = self._protein_embeddings[protein_id]
+                token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
                 """
                 Printing some examples and shapes from original data for reference:
 
@@ -157,6 +159,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                     "token_types": token_types,
                     "rxn_indices": rxn_indices,
                     "reactant_fps": reactant_fps,
+                    "token_padding_mask": token_padding_mask,
                 }
                 # print("protein_embeddings", protein_embeddings.shape)
                 # print("token_types", token_types.shape)
@@ -239,17 +242,17 @@ class ProjectionDataModule(pl.LightningDataModule):
         
         with open(self.config.chem.protein_molecule_pairs_path, "rb") as f:
             protein_molecule_pairs = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
-            print(len(protein_molecule_pairs), "protein-molecule pairs")
+            print(len(protein_molecule_pairs), "\t ", "protein-molecule pairs")
         
         with open(self.config.chem.protein_embedding_path, "rb") as f:
             # protein_embeddings = torch.load(f)  # dict {protein_id: embedding}, embedding [N, 960]
             protein_embeddings = torch.load(f, map_location=torch.device("cpu"))
-            print(len(protein_embeddings), "protein embeddings")
+            print(len(protein_embeddings), "\t ", "protein embeddings")
 
         with open(self.config.chem.synthetic_pathways_path, "rb") as f:
             # synthetic_pathways = torch.load(f)  # dict {smiles: [(token_type, reaction_or_reactant_index)]}  # each value [n_tokens, 2]
             synthetic_pathways = torch.load(f, map_location=torch.device("cpu"))
-            print(len(synthetic_pathways), "synthetic pathways")
+            print(len(synthetic_pathways), "\t ", "synthetic pathways")
 
         self.train_dataset = ProjectionDataset(
             # reaction_matrix=rxn_matrix,
