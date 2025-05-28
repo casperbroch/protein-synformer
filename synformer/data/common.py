@@ -20,36 +20,47 @@ class TokenType(enum.IntEnum):
 
 class ProjectionData(TypedDict, total=False):
     # Encoder
+    '''
     atoms: torch.Tensor
     bonds: torch.Tensor
     atom_padding_mask: torch.Tensor
     smiles: torch.Tensor
+    '''
+    protein_embeddings: torch.Tensor 
     # Decoder
     token_types: torch.Tensor
     rxn_indices: torch.Tensor
     reactant_fps: torch.Tensor
     token_padding_mask: torch.Tensor
-    # Auxilliary
+    # Auxiliary
+    '''
     mol_seq: Sequence[Molecule]
     rxn_seq: Sequence[Reaction | None]
+    '''
 
 
 class ProjectionBatch(TypedDict, total=False):
     # Encoder
+    '''
     atoms: torch.Tensor
     bonds: torch.Tensor
     atom_padding_mask: torch.Tensor
     smiles: torch.Tensor
+    '''
+    protein_embeddings: torch.Tensor 
     # Decoder
     token_types: torch.Tensor
     rxn_indices: torch.Tensor
     reactant_fps: torch.Tensor
     token_padding_mask: torch.Tensor
-    # Auxilliary
+    # Auxiliary
+    '''
     mol_seq: Sequence[Sequence[Molecule]]
     rxn_seq: Sequence[Sequence[Reaction | None]]
+    '''
 
 
+'''
 def featurize_stack_actions(
     mol_idx_seq: Sequence[int | None],
     rxn_idx_seq: Sequence[int | None],
@@ -116,6 +127,7 @@ def create_data(
         "token_padding_mask": stack_feats["token_padding_mask"],
     }
     return data
+'''
 
 
 def draw_data(data: ProjectionData):
