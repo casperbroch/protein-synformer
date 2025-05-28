@@ -1,3 +1,6 @@
+system:
+  device: cpu  # e.g. gpu, cpu
+
 chem:
   fp_option:
     type: morgan

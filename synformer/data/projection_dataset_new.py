@@ -27,7 +27,7 @@ from .common import ProjectionBatch, ProjectionData  #, create_data
 
 class Collater:
     def __init__(self, 
-                 max_protein_len: int = 10000,  # not sure what value makes sense here, if any
+                 max_protein_len: int = 10000,  # not sure what value makes sense here, if any; currently not used 
                  # max_num_atoms: int = 96, 
                  # max_smiles_len: int = 192, 
                  max_num_tokens: int = 24):
@@ -107,10 +107,11 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 token_types = pathway[:, 0]
                 rxn_indices = torch.where(pathway[:,0]==2, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
                 reactant_indices = torch.where(pathway[:,0]==3, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
+                # If reactant_idx == 0, it's a reaction, so we use a zero-vector for its fingerprint
                 reactant_fps = torch.tensor(np.array([
                     self._fpindex[reactant_idx][1]  # fpindex[reactant_idx] returns (molecule, fingerprint) tuple 
                     if reactant_idx != 0 
-                    else torch.zeros(self._fp_option.dim) 
+                    else np.zeros(self._fp_option.morgan_n_bits) 
                     for reactant_idx in reactant_indices 
                 ]))
                 protein_embeddings = self._protein_embeddings[protein_id]
@@ -121,8 +122,8 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 # Example:
                 mol_seq_full (<synformer.chem.mol.Molecule object at 0x17e0a6e90>, 
                               <synformer.chem.mol.Molecule object at 0x17cd06fb0>, 
-                              <synformer.chem.mol.Molecule object at 0x30cbe4cd0>)
-                mol_idx_seq_full [128510, 43161, None]  # notice: None when it's a reaction
+                              <synformer.chem.mol.Molecule object at 0x30cbe4cd0>)  # notice: None when it's a reaction 
+                mol_idx_seq_full [128510, 43161, None]  
                 rxn_seq_full (None, None, <synformer.chem.reaction.Reaction object at 0x17fa29510>)
                 rxn_idx_seq_full [None, None, 59]  # notice: None when it's a building block
                 
@@ -161,10 +162,12 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                     "reactant_fps": reactant_fps,
                     "token_padding_mask": token_padding_mask,
                 }
+                # print(data)
                 # print("protein_embeddings", protein_embeddings.shape)
                 # print("token_types", token_types.shape)
                 # print("rxn_indices", rxn_indices.shape)
                 # print("reactant_fps", reactant_fps.shape)
+                # print("token_padding_mask", token_padding_mask.shape)
                 # raise Exception()
                 yield data 
         '''
@@ -231,6 +234,10 @@ class ProjectionDataModule(pl.LightningDataModule):
             raise FileNotFoundError(
                 f"Protein embeddings not found: {self.config.chem.protein_embedding_path}. "
             )
+        if not os.path.exists(self.config.chem.synthetic_pathways_path):
+            raise FileNotFoundError(
+                f"Synthetic pathways not found: {self.config.chem.synthetic_pathways_path}. "
+            )
 
         '''
         with open(self.config.chem.rxn_matrix, "rb") as f:
@@ -245,13 +252,19 @@ class ProjectionDataModule(pl.LightningDataModule):
             print(len(protein_molecule_pairs), "\t ", "protein-molecule pairs")
         
         with open(self.config.chem.protein_embedding_path, "rb") as f:
-            # protein_embeddings = torch.load(f)  # dict {protein_id: embedding}, embedding [N, 960]
-            protein_embeddings = torch.load(f, map_location=torch.device("cpu"))
+            if self.config.system.device == "cpu":
+                protein_embeddings = torch.load(f, map_location=torch.device("cpu"))
+            else:
+                protein_embeddings = torch.load(f)  
+            # dict {protein_id: embedding}, embedding [N, 960]
             print(len(protein_embeddings), "\t ", "protein embeddings")
 
         with open(self.config.chem.synthetic_pathways_path, "rb") as f:
-            # synthetic_pathways = torch.load(f)  # dict {smiles: [(token_type, reaction_or_reactant_index)]}  # each value [n_tokens, 2]
-            synthetic_pathways = torch.load(f, map_location=torch.device("cpu"))
+            if self.config.system.device == "cpu":
+                synthetic_pathways = torch.load(f, map_location=torch.device("cpu"))
+            else:
+                synthetic_pathways = torch.load(f)  
+            # dict {smiles: [(token_type, reaction_or_reactant_index)]}  # each value [n_tokens, 2]
             print(len(synthetic_pathways), "\t ", "synthetic pathways")
 
         self.train_dataset = ProjectionDataset(
@@ -261,6 +274,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             protein_embeddings=protein_embeddings,
             synthetic_pathways=synthetic_pathways, 
             virtual_length=self.config.train.val_freq * self.batch_size,
+            fp_option=self.config.chem.fp_option,  # FingerprintOption
             **self.dataset_options, 
         )
         # TODO: once we have separate files for train/val datasets, create val_dataset
@@ -272,6 +286,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             protein_molecule_pairs=protein_molecule_pairs,
             protein_embeddings=protein_embeddings,
             virtual_length=self.batch_size,
+            fp_option=self.config.chem.fp_option,  # FingerprintOption
             **self.dataset_options, 
         )
         '''

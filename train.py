@@ -61,6 +61,16 @@ def main(
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
     exp_ver = get_experiment_version()
 
+    # Add flags (click options) to config
+    config.train.exp_name = exp_name
+    config.train.exp_ver = exp_ver
+    config.train.seed = seed
+    config.train.debug = debug
+    config.train.batch_size = batch_size
+    config.train.num_workers = num_workers
+    config.train.devices = devices
+    config.train.num_nodes = num_nodes
+
     # Dataloaders
     datamodule = ProjectionDataModule(
         config,
@@ -87,7 +97,7 @@ def main(
 
     # Train
     trainer = pl.Trainer(
-        accelerator="gpu", 
+        accelerator=config.system.device, 
         devices=devices,
         num_nodes=num_nodes,
         # strategy=strategies.DDPStrategy(static_graph=True),

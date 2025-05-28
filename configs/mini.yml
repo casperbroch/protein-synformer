@@ -1,3 +1,6 @@
+system:
+  device: cpu
+
 # mini config for quick testing purposes
 chem:
   fp_option:
