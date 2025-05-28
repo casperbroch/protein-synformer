@@ -1,6 +1,6 @@
 # mini config for quick testing purposes
 system:
-  device: cpu  # [cpu, gpu, tpu]
+  device: gpu  # [cpu, gpu, tpu]
 
 chem:
   fp_option:
