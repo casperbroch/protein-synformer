@@ -33,10 +33,8 @@ class ProjectionData(TypedDict, total=False):
     reactant_fps: torch.Tensor
     token_padding_mask: torch.Tensor
     # Auxiliary
-    '''
     mol_seq: Sequence[Molecule]
     rxn_seq: Sequence[Reaction | None]
-    '''
 
 
 class ProjectionBatch(TypedDict, total=False):
@@ -54,10 +52,8 @@ class ProjectionBatch(TypedDict, total=False):
     reactant_fps: torch.Tensor
     token_padding_mask: torch.Tensor
     # Auxiliary
-    '''
     mol_seq: Sequence[Sequence[Molecule]]
     rxn_seq: Sequence[Sequence[Reaction | None]]
-    '''
 
 
 '''
