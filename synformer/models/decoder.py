@@ -27,7 +27,7 @@ class Decoder(nn.Module):
         num_layers: int = 6,
         pe_max_len: int = 32,
         output_norm: bool = False,
-        fingerprint_dim: int = 256,
+        fingerprint_dim: int = 2048,
         num_reaction_classes: int = 120,
         decoder_only: bool = False,
     ) -> None:
@@ -52,6 +52,7 @@ class Decoder(nn.Module):
                 norm=nn.LayerNorm(d_model) if output_norm else None,
             )
         else:
+            # !!!
             self.dec = nn.TransformerDecoder(
                 decoder_layer=nn.TransformerDecoderLayer(
                     d_model=d_model,
@@ -63,6 +64,7 @@ class Decoder(nn.Module):
                 num_layers=num_layers,
                 norm=nn.LayerNorm(d_model) if output_norm else None,
             )
+            # !!!
 
     def get_empty_code(
         self,
@@ -99,10 +101,16 @@ class Decoder(nn.Module):
         token_padding_mask: torch.Tensor | None,
     ) -> torch.Tensor:
         bsz, seqlen = token_types.size()
-        if code is None:
-            code, code_padding_mask = self.get_empty_code(bsz, device=reactant_fps.device, dtype=reactant_fps.dtype)
-
-        x = self.embed(token_types, rxn_indices, reactant_fps)
+        # print("bsz", bsz)  # e.g. 10
+        # print("seqlen", seqlen)  # e.g. 24
+        # print("token_types", token_types.shape)  # [bsz, n_tokens] (n_tokens aka seqlen)
+        # print("rxn_indices", rxn_indices.shape)  # [bsz, n_tokens]
+        # print("reactant_fps", reactant_fps.shape)  # [bsz, n_tokens, n_morgan_bits]
+        # print("code", code.shape if code is not None else None)  # [bsz, seqlen, d_model] or None
+        # print("code_padding_mask", code_padding_mask.shape if code_padding_mask is not None else None)  # [bsz, seqlen, d_model] or None
+        x = self.embed(token_types, rxn_indices, reactant_fps)  # [bsz, n_tokens, d_model]
+        # print("x", x.shape)  # e.g. [10, 24, 1] 
+        # print("token_padding_mask", token_padding_mask.shape if token_padding_mask is not None else None)  # [bsz, n_tokens] or None
         causal_mask = nn.Transformer.generate_square_subsequent_mask(
             sz=x.size(1),
             dtype=x.dtype,
@@ -117,6 +125,7 @@ class Decoder(nn.Module):
             if token_padding_mask is not None
             else None
         )
+        # print("tgt_key_padding_mask", tgt_key_padding_mask.shape)  # [bsz, n_tokens]
         if self.decoder_only:
             y: torch.Tensor = self.dec(
                 src=x,
@@ -124,6 +133,9 @@ class Decoder(nn.Module):
                 mask=causal_mask,
             )
         else:
+            if code is None:
+                code, code_padding_mask = self.get_empty_code(bsz, device=reactant_fps.device, dtype=reactant_fps.dtype)
+            # !!!
             y = self.dec(
                 tgt=x,
                 memory=code,
@@ -131,6 +143,7 @@ class Decoder(nn.Module):
                 tgt_key_padding_mask=tgt_key_padding_mask,
                 memory_key_padding_mask=code_padding_mask,
             )  # (bsz, seq_len, d_model)
+            # !!!
         return y
 
     if TYPE_CHECKING:

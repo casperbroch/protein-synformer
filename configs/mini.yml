@@ -25,7 +25,8 @@ model:
   # !!
   encoder_type: protein 
   encoder:
-    d_model: 1152  # ESM num embedding dimensions
+    d_model: 1  # must be same as decoder.d_model
+    d_protein: 1152  # ESM num embedding dimensions
   # !!
   decoder:
     d_model: 1
