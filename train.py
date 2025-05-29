@@ -53,12 +53,12 @@ def main(
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
     exp_ver = get_experiment_version()
 
-    if config.system.device in ("gpu", "cuda"):
+    if config.system.device == "gpu" and torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.set_float32_matmul_precision("medium")
 
-    # Add flags (click options) to config
+    # Add flags (click options) to config for convenience
     config.train.exp_name = exp_name
     config.train.exp_ver = exp_ver
     config.train.seed = seed
@@ -73,9 +73,9 @@ def main(
         config,
         batch_size=batch_size_per_process,
         num_workers=num_workers,
-        **config.data,  # including protein_embedding_path 
+        **config.data,  
     )
-    print(datamodule)
+    # print(datamodule)
 
     # Model
     model = SynformerWrapper(

@@ -14,6 +14,7 @@ from synformer.chem.matrix import ReactantReactionMatrix
 # from synformer.chem.stack import create_stack_step_by_step
 from synformer.chem.mol import FingerprintOption, Molecule
 from synformer.utils.train import worker_init_fn
+from synformer.data.common import TokenType
 
 from .collate import (
     apply_collate,
@@ -28,6 +29,7 @@ from .common import ProjectionBatch, ProjectionData  #, create_data
 class Collater:
     def __init__(self, 
                  max_protein_len: int = 10000,  # not sure what value makes sense here, if any; currently not used 
+                 # TODO: are proteins padded to max_protein_len?
                  # max_num_atoms: int = 96, 
                  # max_smiles_len: int = 192, 
                  max_num_tokens: int = 24):
@@ -102,20 +104,25 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
 
     def __iter__(self):
         for smiles, protein_id in self._protein_molecule_pairs:
+            # print((smiles, protein_id))
             if smiles in self._synthetic_pathways and protein_id in self._protein_embeddings:
-                pathway = torch.tensor(self._synthetic_pathways[smiles])
+                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.int32)
                 token_types = pathway[:, 0]
-                rxn_indices = torch.where(pathway[:,0]==2, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
-                reactant_indices = torch.where(pathway[:,0]==3, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
+                rxn_indices = torch.where(pathway[:,0] == TokenType.REACTION, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
+                reactant_indices = torch.where(pathway[:,0] == TokenType.REACTANT, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
                 # If reactant_idx == 0, it's a reaction, so we use a zero-vector for its fingerprint
-                reactant_fps = torch.tensor(np.array([
-                    self._fpindex[reactant_idx][1]  # fpindex[reactant_idx] returns (molecule, fingerprint) tuple 
-                    if reactant_idx != 0 
-                    else np.zeros(self._fp_option.morgan_n_bits) 
-                    for reactant_idx in reactant_indices 
-                ]))
+                reactant_fps = torch.tensor(
+                    np.array([
+                        self._fpindex[reactant_idx][1]  # fpindex[reactant_idx] returns (molecule, fingerprint) tuple 
+                        if reactant_idx != 0 
+                        else np.zeros(self._fp_option.morgan_n_bits) 
+                        for reactant_idx in reactant_indices 
+                    ]),
+                    dtype=torch.float32
+                )
                 protein_embeddings = self._protein_embeddings[protein_id].to(torch.float32)
                 token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
+                # TODO: "auxiliary data": mol_seq, rxn_seq (see example below)
                 """
                 Printing some examples and shapes from original data for reference:
 
@@ -185,7 +192,6 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 product = random.choice(list(stack.get_top()))
                 data = create_data(
                     product=product,
-                    protein=protein,
                     mol_seq=mol_seq_full,
                     mol_idx_seq=mol_idx_seq_full,
                     rxn_seq=rxn_seq_full,

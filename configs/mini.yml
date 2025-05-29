@@ -13,9 +13,9 @@ chem:
   fpindex: data/processed/comp_256/fpindex.pkl
   # !!
   # TODO: separate into train/val/test sets and put separate paths
-  protein_molecule_pairs_path: data/protein_molecule_pairs/papyrus_selection_182129.csv
-  protein_embedding_path: data/protein_embeddings/embeddings_selection_float16_4973.pth 
-  synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_290000.pth
+  protein_molecule_pairs_path: data/protein_molecule_pairs/papyrus_selection_mini.csv
+  protein_embedding_path: data/protein_embeddings/embeddings_selection_float16_mini.pth 
+  synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_mini.pth
   # !!
 
 data:
@@ -62,7 +62,7 @@ train:
     reaction: 1.0
     fingerprint_diffusion: 0.0  # Multinomial diffusion loss does not drop
     fingerprint_bce: 0.5
-  max_iters: 1_000_000
+  max_iters: 100  # 1_000_000
   val_freq: 5000
   max_grad_norm: 100.0
   optimizer:
