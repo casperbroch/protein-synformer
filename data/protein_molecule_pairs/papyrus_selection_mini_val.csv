@@ -1,0 +1,11 @@
+SMILES,target_id
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2cc3c(cc2)[nH]c(-c2ccccc2)n3)n1,O15118_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2cc3c(cc2)[nH]c(-c2ccccc2)n3)n1,P10636_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2ccc3[nH]c(-c4ccccc4)nc3c2)n1,P38398_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2ccc3[nH]c(-c4ccccc4)nc3c2)n1,P43220_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2ccc3[nH]c(-c4ccccc4)nc3c2)n1,P84022_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2ccc3[nH]c(-c4ccccc4)nc3c2)n1,Q13526_WT
+Cn1cc([N+](=O)[O-])c(C(=O)Nc2cc3c(cc2)[nH]c(-c2ccccc2)n3)n1,Q16637_WT
+O=C1NC(=O)c2c1cc(Nc1ccccc1)c(Nc1ccccc1)c2,O94925_WT
+O=C1NC(=O)c2c1cc(Nc1ccccc1)c(Nc1ccccc1)c2,P00533_WT
+O=C1NC(=O)c2c1cc(Nc1ccccc1)c(Nc1ccccc1)c2,P08684_WT

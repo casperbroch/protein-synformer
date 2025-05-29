@@ -28,8 +28,7 @@ from .common import ProjectionBatch, ProjectionData  #, create_data
 
 class Collater:
     def __init__(self, 
-                 max_protein_len: int = 10000,  # not sure what value makes sense here, if any; currently not used 
-                 # TODO: are proteins padded to max_protein_len?
+                 max_protein_len: int = 2010,  # proteins are padded to max_protein_len
                  # max_num_atoms: int = 96, 
                  # max_smiles_len: int = 192, 
                  max_num_tokens: int = 24):
@@ -93,7 +92,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         self._fpindex = fpindex
         self._fp_option = fp_option 
         # self._reaction_matrix = reaction_matrix
-        self._protein_molecule_pairs = protein_molecule_pairs  
+        self._protein_molecule_pairs = protein_molecule_pairs 
         self._protein_embeddings = protein_embeddings 
         self._synthetic_pathways = synthetic_pathways 
         self._init_stack_weighted_ratio = init_stack_weighted_ratio
@@ -232,9 +231,13 @@ class ProjectionDataModule(pl.LightningDataModule):
                 f"Fingerprint index not found: {self.config.chem.fpindex}. "
                 "Please generate the fingerprint index before training."
             )
-        if not os.path.exists(self.config.chem.protein_molecule_pairs_path):
+        if not os.path.exists(self.config.chem.protein_molecule_pairs_train_path):
             raise FileNotFoundError(
-                f"Protein-molecule pairs not found: {self.config.chem.protein_molecule_pairs_path}. "
+                f"Protein-molecule pairs (train) not found: {self.config.chem.protein_molecule_pairs_train_path}. "
+            )
+        if not os.path.exists(self.config.chem.protein_molecule_pairs_val_path):
+            raise FileNotFoundError(
+                f"Protein-molecule pairs (val) not found: {self.config.chem.protein_molecule_pairs_val_path}. "
             )
         if not os.path.exists(self.config.chem.protein_embedding_path):
             raise FileNotFoundError(
@@ -253,9 +256,13 @@ class ProjectionDataModule(pl.LightningDataModule):
         with open(self.config.chem.fpindex, "rb") as f:
             fpindex = pickle.load(f)
         
-        with open(self.config.chem.protein_molecule_pairs_path, "rb") as f:
-            protein_molecule_pairs = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
-            print(len(protein_molecule_pairs), "\t ", "protein-molecule pairs")
+        with open(self.config.chem.protein_molecule_pairs_train_path, "rb") as f:
+            protein_molecule_pairs_train = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
+            print(len(protein_molecule_pairs_train), "\t ", "protein-molecule pairs (train)")
+        
+        with open(self.config.chem.protein_molecule_pairs_val_path, "rb") as f:
+            protein_molecule_pairs_val = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
+            print(len(protein_molecule_pairs_val), "\t ", "protein-molecule pairs (val)")
         
         with open(self.config.chem.protein_embedding_path, "rb") as f:
             if self.config.system.device == "cpu":
@@ -276,26 +283,23 @@ class ProjectionDataModule(pl.LightningDataModule):
         self.train_dataset = ProjectionDataset(
             # reaction_matrix=rxn_matrix,
             fpindex=fpindex,
-            protein_molecule_pairs=protein_molecule_pairs,
+            protein_molecule_pairs=protein_molecule_pairs_train,
             protein_embeddings=protein_embeddings,
             synthetic_pathways=synthetic_pathways, 
             virtual_length=self.config.train.val_freq * self.batch_size,
             fp_option=self.config.chem.fp_option,  # FingerprintOption
             **self.dataset_options, 
         )
-        # TODO: once we have separate files for train/val datasets, create val_dataset
-        self.val_dataset = self.train_dataset  # for now, use the same dataset for validation
-        '''
         self.val_dataset = ProjectionDataset(
             # reaction_matrix=rxn_matrix,
             fpindex=fpindex,
-            protein_molecule_pairs=protein_molecule_pairs,
+            protein_molecule_pairs=protein_molecule_pairs_val,
             protein_embeddings=protein_embeddings,
+            synthetic_pathways=synthetic_pathways, 
             virtual_length=self.batch_size,
             fp_option=self.config.chem.fp_option,  # FingerprintOption
             **self.dataset_options, 
         )
-        '''
 
     def train_dataloader(self):
         use_workers = self.num_workers > 0

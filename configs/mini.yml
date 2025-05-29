@@ -12,8 +12,8 @@ chem:
   rxn_matrix: data/processed/comp_256/matrix.pkl
   fpindex: data/processed/comp_256/fpindex.pkl
   # !!
-  # TODO: separate into train/val/test sets and put separate paths
-  protein_molecule_pairs_path: data/protein_molecule_pairs/papyrus_selection_mini.csv
+  protein_molecule_pairs_train_path: data/protein_molecule_pairs/papyrus_selection_mini_train.csv
+  protein_molecule_pairs_val_path: data/protein_molecule_pairs/papyrus_selection_mini_val.csv
   protein_embedding_path: data/protein_embeddings/embeddings_selection_float16_mini.pth 
   synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_mini.pth
   # !!
