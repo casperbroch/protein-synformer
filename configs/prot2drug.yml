@@ -11,9 +11,9 @@ chem:
   rxn_matrix: data/processed/comp_2048/matrix.pkl
   fpindex: data/processed/comp_2048/fpindex.pkl
   # !!
-  # TODO: use correct paths for train/val splits
-  protein_molecule_pairs_train_path: data/protein_molecule_pairs/papyrus_selection_182129.csv
-  protein_molecule_pairs_train_val: data/protein_molecule_pairs/papyrus_selection_182129.csv
+  protein_molecule_pairs_train_path: data/protein_molecule_pairs/papyrus_train_155187.csv
+  protein_molecule_pairs_val_path: data/protein_molecule_pairs/papyrus_val_19399.csv
+  # protein_molecule_pairs_test_path: data/protein_molecule_pairs/papyrus_test_19399.csv
   protein_embedding_path: data/protein_embeddings/embeddings_selection_float16_4973.pth 
   synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_290000.pth
   # !!
