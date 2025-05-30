@@ -72,7 +72,7 @@ class Collater:
 class ProjectionDataset(IterableDataset[ProjectionData]):
     def __init__(
         self,
-        reaction_matrix: ReactantReactionMatrix,  # rxn_matrix 
+        rxn_matrix: ReactantReactionMatrix,  
         fpindex: FingerprintIndex,  # fpindex
         protein_molecule_pairs: np.ndarray,  
         protein_embeddings: dict, 
@@ -91,7 +91,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         self._max_num_reactions = max_num_reactions
         self._fpindex = fpindex
         self._fp_option = fp_option 
-        self._reaction_matrix = reaction_matrix
+        self._rxn_matrix = rxn_matrix
         self._protein_molecule_pairs = protein_molecule_pairs 
         self._protein_embeddings = protein_embeddings 
         self._synthetic_pathways = synthetic_pathways 
@@ -112,7 +112,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 # If reactant_idx == 0, it's a reaction, so we use a zero-vector for its fingerprint
                 reactant_fps = torch.tensor(
                     np.array([
-                        self._fpindex[reactant_idx][1]  # fpindex[reactant_idx] returns (molecule, fingerprint) tuple 
+                        self._fpindex[reactant_idx][1]  # fpindex[reactant_idx] returns (Molecule, fingerprint) tuple 
                         if reactant_idx != 0 
                         else np.zeros(self._fp_option.morgan_n_bits) 
                         for reactant_idx in reactant_indices 
@@ -122,17 +122,18 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
                 protein_embeddings = self._protein_embeddings[protein_id].to(torch.float32)
                 token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
                 # I assume it's n_tokens-2 elements (minus start, end tokens); see example below: 3 elements 
+                # so I skip the start and end tokens
                 mol_seq_full = [
-                    self._fpindex[reactant_idx][0]  # fpindex[reactant_idx] returns (molecule, fingerprint) tuple 
+                    self._fpindex[reactant_idx][0]  # fpindex[reactant_idx] returns (Molecule, fingerprint) tuple 
                     if reactant_idx != 0 
                     else None
-                    for reactant_idx in reactant_indices 
+                    for reactant_idx in reactant_indices[1:-1] 
                 ]
                 rxn_seq_full = [
-                    self._reaction_matrix.reactions[rxn_idx]  # rxn_matrix.reactions[rxn_idx] returns Reaction object
+                    self._rxn_matrix.reactions[rxn_idx]  # rxn_matrix.reactions[rxn_idx] returns Reaction object
                     if rxn_idx != 0 
                     else None
-                    for rxn_idx in rxn_indices 
+                    for rxn_idx in rxn_indices[1:-1] 
                 ]
                 """
                 Printing some examples and shapes from original data for reference:
@@ -196,7 +197,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         '''
         while True:
             for stack in create_stack_step_by_step(
-                self._reaction_matrix,
+                self._rxn_matrix,
                 max_num_reactions=self._max_num_reactions,
                 max_num_atoms=self._max_num_atoms,  # ??
                 init_stack_weighted_ratio=self._init_stack_weighted_ratio,
@@ -296,7 +297,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             print(len(synthetic_pathways), "\t ", "synthetic pathways")
 
         self.train_dataset = ProjectionDataset(
-            reaction_matrix=rxn_matrix,
+            rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_molecule_pairs=protein_molecule_pairs_train,
             protein_embeddings=protein_embeddings,
@@ -306,7 +307,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             **self.dataset_options, 
         )
         self.val_dataset = ProjectionDataset(
-            reaction_matrix=rxn_matrix,
+            rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_molecule_pairs=protein_molecule_pairs_val,
             protein_embeddings=protein_embeddings,
@@ -380,14 +381,14 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             protein_embeddings = torch.load(f)
 
         self.train_dataset = ProjectionDataset(
-            reaction_matrix=rxn_matrix,
+            rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_embeddings=protein_embeddings,
             virtual_length=self.config.train.val_freq * self.batch_size,
             **self.dataset_options,
         )
         self.val_dataset = ProjectionDataset(
-            reaction_matrix=rxn_matrix,
+            rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_embeddings=protein_embeddings,
             virtual_length=self.batch_size,
