@@ -20,3 +20,12 @@ def get_experiment_name(model_name: str, version: str, version_time: datetime.da
 
 def get_experiment_version():
     return time.strftime("%Y_%m_%d__%H_%M_%S", time.localtime())
+
+
+def n_params(model, only_trainable=False):
+    # get PyTorch model parameter count 
+    return sum(
+        p.numel() 
+        for p in model.parameters() 
+        if not only_trainable or p.requires_grad
+    )

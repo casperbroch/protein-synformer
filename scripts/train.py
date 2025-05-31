@@ -16,6 +16,7 @@ from synformer.utils.misc import (
     get_experiment_version,
 )
 from synformer.utils.vc import get_vc_info
+from synformer.utils.misc import n_params
 
 
 @click.command()
@@ -108,7 +109,7 @@ def main(
             "resume": resume,
         },
     )
-    print(model)
+    # print(model)
 
     if resume:
         # Assuming: only resuming the decoder and decoder heads
@@ -132,6 +133,26 @@ def main(
             filtered_state_dict, 
             strict=False
         )
+    
+    if config.model.decoder.lora:
+        # It might already be doing this automatically, but to be sure:
+        # Freezing: non-LoRA decoder, decoder heads 
+        # Not freezing: LoRA, encoder 
+        for name, param in model.named_parameters():
+            if "lora" not in name and any([
+                name.startswith("model.decoder"),
+                name.startswith("model.fingerprint_head"),
+                name.startswith("model.token_head"), 
+                name.startswith("model.reaction_head"),
+            ]):
+                param.requires_grad = False
+        print("Parameters: model:\t\t", 
+              n_params(model))  # entire model 
+        print("Trainable parameters: model:\t", 
+              n_params(model, only_trainable=True))  # lora + encoder
+        print("Trainable parameters: lora_dec:\t", 
+              n_params(model.model.decoder.lora_dec, only_trainable=True))  # only lora 
+    import sys; sys.exit(0)
 
     # Train
     trainer = pl.Trainer(
