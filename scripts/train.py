@@ -152,7 +152,6 @@ def main(
               n_params(model, only_trainable=True))  # lora + encoder
         print("Trainable parameters: lora_dec:\t", 
               n_params(model.model.decoder.lora_dec, only_trainable=True))  # only lora 
-    import sys; sys.exit(0)
 
     # Train
     trainer = pl.Trainer(
