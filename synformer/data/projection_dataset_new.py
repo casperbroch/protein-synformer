@@ -140,7 +140,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         """
         for smiles, protein_id in self._protein_molecule_pairs:
             if smiles in self._synthetic_pathways and protein_id in self._protein_embeddings:
-                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.long) 
+                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.long)
                 token_types = pathway[:, 0]
                 rxn_indices = torch.where(pathway[:,0] == TokenType.REACTION, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
                 reactant_indices = torch.where(pathway[:,0] == TokenType.REACTANT, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
@@ -193,13 +193,13 @@ class ProjectionDataModule(pl.LightningDataModule):
         config,
         batch_size: int,
         num_workers: int = 4,
-        **kwargs,  
+        **kwargs,
     ) -> None:
         super().__init__()
         self.config = config
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.dataset_options = kwargs  
+        self.dataset_options = kwargs
 
     def setup(self, stage: str | None = None) -> None:
         trainer = self.trainer
@@ -218,19 +218,19 @@ class ProjectionDataModule(pl.LightningDataModule):
             )
         if not os.path.exists(self.config.chem.protein_molecule_pairs_train_path):
             raise FileNotFoundError(
-                f"Protein-molecule pairs (train) not found: {self.config.chem.protein_molecule_pairs_train_path}. "
+                f"Protein-molecule pairs (train) not found: {self.config.chem.protein_molecule_pairs_train_path}."
             )
         if not os.path.exists(self.config.chem.protein_molecule_pairs_val_path):
             raise FileNotFoundError(
-                f"Protein-molecule pairs (val) not found: {self.config.chem.protein_molecule_pairs_val_path}. "
+                f"Protein-molecule pairs (val) not found: {self.config.chem.protein_molecule_pairs_val_path}."
             )
         if not os.path.exists(self.config.chem.protein_embedding_path):
             raise FileNotFoundError(
-                f"Protein embeddings not found: {self.config.chem.protein_embedding_path}. "
+                f"Protein embeddings not found: {self.config.chem.protein_embedding_path}."
             )
         if not os.path.exists(self.config.chem.synthetic_pathways_path):
             raise FileNotFoundError(
-                f"Synthetic pathways not found: {self.config.chem.synthetic_pathways_path}. "
+                f"Synthetic pathways not found: {self.config.chem.synthetic_pathways_path}."
             )
 
         with open(self.config.chem.rxn_matrix, "rb") as f:
@@ -238,50 +238,44 @@ class ProjectionDataModule(pl.LightningDataModule):
 
         with open(self.config.chem.fpindex, "rb") as f:
             fpindex = pickle.load(f)
-        
+
         with open(self.config.chem.protein_molecule_pairs_train_path, "rb") as f:
-            protein_molecule_pairs_train = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
-            print(len(protein_molecule_pairs_train), "\t ", "protein-molecule pairs (train)")
-        
+            protein_molecule_pairs_train = pd.read_csv(f).to_numpy()
+            print(len(protein_molecule_pairs_train), "\t", "protein-molecule pairs (train)")
+
         with open(self.config.chem.protein_molecule_pairs_val_path, "rb") as f:
-            protein_molecule_pairs_val = pd.read_csv(f).to_numpy()  # [n_proteins, 2]
-            print(len(protein_molecule_pairs_val), "\t ", "protein-molecule pairs (val)")
-        
+            protein_molecule_pairs_val = pd.read_csv(f).to_numpy()
+            print(len(protein_molecule_pairs_val), "\t", "protein-molecule pairs (val)")
+
+        # Always map_location="cpu" so that these embeddings live on CPU
         with open(self.config.chem.protein_embedding_path, "rb") as f:
-            if self.config.system.device == "cpu":
-                protein_embeddings = torch.load(f, map_location=torch.device("cpu"))
-            else:
-                protein_embeddings = torch.load(f)  
-            # dict {protein_id: embedding}, each embedding [n_aminoacids, 960]
-            print(len(protein_embeddings), "\t ", "protein embeddings")
+            protein_embeddings = torch.load(f, map_location=torch.device("cpu"))
+            print(len(protein_embeddings), "\t", "protein embeddings (loaded on CPU)")
 
         with open(self.config.chem.synthetic_pathways_path, "rb") as f:
-            if self.config.system.device == "cpu":
-                synthetic_pathways = torch.load(f, map_location=torch.device("cpu"))
-            else:
-                synthetic_pathways = torch.load(f)  
-            # dict {smiles: [(token_type, reaction_or_reactant_index)]}  # each value [n_tokens, 2]
-            print(len(synthetic_pathways), "\t ", "synthetic pathways")
+            synthetic_pathways = torch.load(f, map_location=torch.device("cpu"))
+            print(len(synthetic_pathways), "\t", "synthetic pathways")
 
         self.train_dataset = ProjectionDataset(
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_molecule_pairs=protein_molecule_pairs_train,
             protein_embeddings=protein_embeddings,
-            synthetic_pathways=synthetic_pathways, 
+            synthetic_pathways=synthetic_pathways,
             virtual_length=self.config.train.val_freq * self.batch_size,
-            fp_option=self.config.chem.fp_option, 
-            **self.dataset_options, 
+            fp_option=self.config.chem.fp_option,
+            **self.dataset_options,
         )
+
         self.val_dataset = ProjectionDataset(
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_molecule_pairs=protein_molecule_pairs_val,
             protein_embeddings=protein_embeddings,
-            synthetic_pathways=synthetic_pathways, 
+            synthetic_pathways=synthetic_pathways,
             virtual_length=self.batch_size,
-            fp_option=self.config.chem.fp_option, 
-            **self.dataset_options, 
+            fp_option=self.config.chem.fp_option,
+            **self.dataset_options,
         )
 
     def train_dataloader(self):
