@@ -111,31 +111,27 @@ def main(
     print(model)
 
     if resume:
-        ckpt = torch.load(resume, map_location="cpu")
-        state = ckpt["state_dict"]
-        filtered = {
+        # Assuming: only resuming the decoder and decoder heads
+        print("Resuming from checkpoint:", resume)
+        if config.system.device == "cpu":
+            ckpt = torch.load(resume, map_location="cpu")
+        else:
+            ckpt = torch.load(resume)
+        state_dict = ckpt["state_dict"]
+        filtered_state_dict = {
             k: v
-            for k, v in state.items()
-            if k.startswith("model.decoder.") or k.startswith("model.fingerprint_head.")
+            for k, v in state_dict.items()
+            if any([
+                k.startswith("model.decoder."), 
+                k.startswith("model.fingerprint_head."),
+                k.startswith("model.token_head."),
+                k.startswith("model.reaction_head."),
+            ])
         }
-        model.load_state_dict(filtered, strict=False)
-        resume = None
-    
-    # <temp>
-    # Checkpoint check: are they the same?
-    """
-    checkpoint = torch.load("data/trained_weights/sf_ed_default.ckpt", map_location="cpu") 
-    print(
-        "Checkpoint check:",
-        torch.allclose(
-            checkpoint["state_dict"]["model.decoder.in_token.weight"], 
-            model.state_dict()["model.decoder.in_token.weight"]
+        model.load_state_dict(
+            filtered_state_dict, 
+            strict=False
         )
-    )
-    print(checkpoint["state_dict"]["model.decoder.in_token.weight"])
-    print(model.state_dict()["model.decoder.in_token.weight"])
-    """
-    # </temp>
 
     # Train
     trainer = pl.Trainer(

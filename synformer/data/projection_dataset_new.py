@@ -140,7 +140,7 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         """
         for smiles, protein_id in self._protein_molecule_pairs:
             if smiles in self._synthetic_pathways and protein_id in self._protein_embeddings:
-                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.int32)
+                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.long) 
                 token_types = pathway[:, 0]
                 rxn_indices = torch.where(pathway[:,0] == TokenType.REACTION, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
                 reactant_indices = torch.where(pathway[:,0] == TokenType.REACTANT, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
