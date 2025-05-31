@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
+from lora_pytorch import LoRA
 
 from synformer.data.common import TokenType
 from synformer.models.transformer.positional_encoding import PositionalEncoding
@@ -30,6 +31,8 @@ class Decoder(nn.Module):
         fingerprint_dim: int = 2048,
         num_reaction_classes: int = 120,
         decoder_only: bool = False,
+        lora: bool = False,
+        lora_rank: int = 8,
     ) -> None:
         super().__init__()
         self.d_model = d_model
@@ -65,6 +68,15 @@ class Decoder(nn.Module):
                 norm=nn.LayerNorm(d_model) if output_norm else None,
             )
             # !!!
+        # !!!
+        if lora:
+            # This wraps the decoder in a LoRA module, allowing for low-rank adaptation.
+            # It modifies self.dec, so it now contains the LoRA layers.
+            self.lora_dec = LoRA.from_module(
+                self.dec, 
+                rank=lora_rank
+            )
+        # !!!
 
     def get_empty_code(
         self,

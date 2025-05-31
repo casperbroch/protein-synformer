@@ -2,6 +2,7 @@ rdkit>=2023.09
 
 torch>=2.0
 pytorch-lightning>=2.0
+lora-pytorch
 tensorboard
 einops
 scikit-learn
@@ -22,3 +23,4 @@ tqdm
 jupyterlab
 ipywidgets
 click
+wandb

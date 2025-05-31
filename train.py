@@ -1,10 +1,12 @@
 import os
+import warnings
 
 import click
 import pytorch_lightning as pl
 import torch
 from omegaconf import OmegaConf
 from pytorch_lightning import callbacks, loggers, strategies
+import wandb
 
 from synformer.data.projection_dataset_new import ProjectionDataModule  
 from synformer.models.wrapper import SynformerWrapper
@@ -68,6 +70,23 @@ def main(
     config.train.devices = devices
     config.train.num_nodes = num_nodes
 
+    # Monitoring
+    if not os.path.exists("configs/wandb.yml"):
+        warnings.warn("No wandb config found! Not using wandb.")
+    else:
+        wandb_config = OmegaConf.load("configs/wandb.yml")
+        if wandb_config.enabled:
+            os.environ["WANDB_API_KEY"] = wandb_config["api_key"]
+            wandb.init(
+                project=config.project.name,
+                entity=wandb_config.entity,
+                sync_tensorboard=True,
+                config=OmegaConf.to_container(config), 
+                name=config.train.exp_name, 
+                save_code=False,
+                # resume=True
+            )
+
     # Dataloaders
     datamodule = ProjectionDataModule(
         config,
@@ -89,7 +108,23 @@ def main(
             "resume": resume,
         },
     )
-    # print(model)
+    print(model)
+    
+    # <temp>
+    # Checkpoint check: are they the same?
+    """
+    checkpoint = torch.load("data/trained_weights/sf_ed_default.ckpt", map_location="cpu") 
+    print(
+        "Checkpoint check:",
+        torch.allclose(
+            checkpoint["state_dict"]["model.decoder.in_token.weight"], 
+            model.state_dict()["model.decoder.in_token.weight"]
+        )
+    )
+    print(checkpoint["state_dict"]["model.decoder.in_token.weight"])
+    print(model.state_dict()["model.decoder.in_token.weight"])
+    """
+    # </temp>
 
     # Train
     trainer = pl.Trainer(
@@ -116,6 +151,20 @@ def main(
         datamodule=datamodule, 
         ckpt_path=resume
     )
+    print("Finished training")
+
+    '''
+    if config.model.decoder.lora:
+        # Save LoRA weights 
+        #
+        #
+        #
+        # Merge LoRA weights into the original model weights
+        print("Merging...")
+        merged_decoder = model.model.decoder.lora_dec.merge_lora() 
+        # How to save inside of model? and delete lora_dec?
+        ...
+    '''
 
 
 if __name__ == "__main__":

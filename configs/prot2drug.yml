@@ -1,6 +1,10 @@
 system:
   device: gpu  # [cpu, gpu, tpu]
 
+project:
+  # name: protein-synformer-2048-lora
+  name: protein-synformer
+
 chem:
   fp_option:
     type: morgan
@@ -38,6 +42,8 @@ model:
     output_norm: false
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
     num_reaction_classes: 120
+    lora: true
+    lora_rank: 16
   fingerprint_head_type: diffusion
   fingerprint_head:
     d_model: 768
