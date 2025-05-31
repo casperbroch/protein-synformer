@@ -30,7 +30,7 @@ from typing import Literal, cast
 import torch
 from einops import rearrange, repeat
 from torch import Tensor, broadcast_tensors, einsum, nn
-from torch.cuda.amp import autocast
+from torch import amp
 from torch.nn import Module
 
 # helper functions
@@ -54,7 +54,7 @@ def rotate_half(x):
     return rearrange(x, "... d r -> ... (d r)")
 
 
-@autocast(enabled=False)
+@amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=False)
 def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     if t.ndim == 3:
         seq_len = t.shape[seq_dim]
@@ -262,8 +262,8 @@ class RotaryEmbedding(Module):
         all_freqs = broadcast_tensors(*all_freqs)
         return torch.cat(all_freqs, dim=-1)
 
-    @autocast(enabled=False)
-    def forward(self, t: Tensor, seq_len=None, offset=0):
+@amp.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=False)
+def forward(self, t: Tensor, seq_len=None, offset=0):
         should_cache = not self.learned_freq and exists(seq_len) and self.freqs_for != "pixel"
 
         if should_cache and exists(self.cached_freqs) and (offset + seq_len) <= self.cached_freqs.shape[0]:

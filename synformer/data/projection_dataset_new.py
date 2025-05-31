@@ -288,6 +288,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
             persistent_workers=use_workers,
+            pin_memory=True,
         )
 
     def val_dataloader(self):
@@ -298,6 +299,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
             persistent_workers=True,
+            pin_memory=True,
         )
 
 
@@ -365,6 +367,7 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
             persistent_workers=True,
+            pin_memory=True,
         )
 
     def val_dataloader(self):
@@ -375,4 +378,5 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
             persistent_workers=True,
+            pin_memory=True,
         )
