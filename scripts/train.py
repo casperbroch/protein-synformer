@@ -162,7 +162,6 @@ def main(
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
         log_every_n_steps=1,
-        max_steps=config.train.max_iters,
         callbacks=[
             callbacks.ModelCheckpoint(save_last=True, monitor="val/loss", mode="min", save_top_k=5),
             callbacks.LearningRateMonitor(logging_interval="step"),
@@ -170,7 +169,8 @@ def main(
         logger=[
             loggers.TensorBoardLogger(log_dir, name=exp_name, version=exp_ver),
         ],
-        val_check_interval=config.train.val_freq,
+        max_epochs=config.train.max_epochs,
+        val_check_interval=config.train.val_check_interval,
         limit_val_batches=4,
     )
     trainer.fit(

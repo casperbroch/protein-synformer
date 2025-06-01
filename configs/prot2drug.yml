@@ -3,7 +3,8 @@ system:
 
 project:
   # name: protein-synformer-2048-lora
-  name: protein-synformer
+  # name: protein-synformer
+  name: protein-synformer-optuna-trials
 
 chem:
   fp_option:
@@ -19,7 +20,7 @@ chem:
   protein_molecule_pairs_val_path: data/protein_molecule_pairs/papyrus_val_19399.csv
   # protein_molecule_pairs_test_path: data/protein_molecule_pairs/papyrus_test_19399.csv
   protein_embedding_path: data/protein_embeddings/embeddings_selection_float16_4973.pth 
-  synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_290000.pth
+  synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_370000.pth
   # !!
 
 data:
@@ -43,7 +44,7 @@ model:
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
     num_reaction_classes: 120
     lora: true
-    lora_rank: 16
+    lora_rank: 32 # Overwritten by Optuna when doing trials
   fingerprint_head_type: diffusion
   fingerprint_head:
     d_model: 768
@@ -63,17 +64,17 @@ train:
     reaction: 1.0
     fingerprint_diffusion: 0.0  # Multinomial diffusion loss does not drop
     fingerprint_bce: 0.5
-  max_iters: 100  # 1_000_000
-  val_freq: 5000
+  max_epochs: 2
+  val_check_interval: 500
   max_grad_norm: 100.0
   optimizer:
     type: adamw
-    lr: 3.e-4
-    weight_decay: 0
+    lr: 3.e-4 # Overwritten by Optuna when doing trials
+    weight_decay: 0 # Overwritten by Optuna when doing trials
     beta1: 0.9
     beta2: 0.999
   scheduler:
     type: plateau
-    factor: 0.8
-    patience: 10
-    min_lr: 1.e-5
+    factor: 0.8 # Overwritten by Optuna when doing trials
+    patience: 10 # Overwritten by Optuna when doing trials
+    min_lr: 1.e-5 # Overwritten by Optuna when doing trials

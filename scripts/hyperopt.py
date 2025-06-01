@@ -41,6 +41,7 @@ def pl_one_run(
 ) -> float:
     cfg = OmegaConf.load(config_path)
     cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(overrides))
+    print(cfg)
 
     seed = cli.get("seed", 42) + (trial.number if trial else 0)
     pl.seed_everything(seed, workers=True)
@@ -146,11 +147,13 @@ def pl_one_run(
         num_sanity_val_steps=cli["num_sanity_val_steps"],
         gradient_clip_val=cfg.train.max_grad_norm,
         log_every_n_steps=1,
-        max_steps=cfg.train.max_iters,
+        #max_steps=cfg.train.max_iters,
         callbacks=cb_list,
-        logger=[loggers.TensorBoardLogger(cli["log_dir"], name=exp_name, version=exp_ver)],
-        val_check_interval=cfg.train.val_freq,
+        logger=[loggers.TensorBoardLogger(cli["log_dir"], name=exp_name, version=exp_ver)],        
         limit_val_batches=4,
+        
+        max_epochs=cfg.train.max_epochs,
+        val_check_interval=cfg.train.val_check_interval,
     )
 
     trainer.fit(model, datamodule=dm)

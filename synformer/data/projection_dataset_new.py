@@ -262,7 +262,7 @@ class ProjectionDataModule(pl.LightningDataModule):
             protein_molecule_pairs=protein_molecule_pairs_train,
             protein_embeddings=protein_embeddings,
             synthetic_pathways=synthetic_pathways,
-            virtual_length=self.config.train.val_freq * self.batch_size,
+            virtual_length=len(protein_molecule_pairs_train),
             fp_option=self.config.chem.fp_option,
             **self.dataset_options,
         )
@@ -347,7 +347,7 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_embeddings=protein_embeddings,
-            virtual_length=self.config.train.val_freq * self.batch_size,
+            virtual_length=len(protein_molecule_pairs_train),
             **self.dataset_options,
         )
         self.val_dataset = ProjectionDataset(
