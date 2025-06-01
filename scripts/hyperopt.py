@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# scripts/hyperopt.py
-# -------------------
-# Optuna-hyperparameter search voor Synformer
-# (code baseert zich waar mogelijk 1-op-1 op train.py)
-
 import os, sys, json, datetime, multiprocessing as mp
 import click, optuna
 
@@ -21,26 +15,21 @@ from synformer.utils.misc import (
     get_experiment_version,
 )
 from synformer.utils.vc import get_vc_info
-from synformer.utils.misc import n_params     # alleen nodig bij LoRA-freeze
+from synformer.utils.misc import n_params
 
-# ---------------------------------------------------------------------------
-# snellere matmul op Ampere/Hooper e.d. – identiek aan train.py
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.set_float32_matmul_precision("medium")
-# ---------------------------------------------------------------------------
 
 
-# --------------------- eigen (PL-compatibele) Optuna-callback --------------
 class OptunaPruningCallback(pl.callbacks.Callback):
     def __init__(self, trial: optuna.Trial, monitor: str = "val/loss"):
         self.trial = trial
         self.monitor = monitor
 
-    # PL ≥2.0 vereist state-dict hooks
-    def state_dict(self):          # noqa: D401
+    def state_dict(self):  
         return {}
-    def load_state_dict(self, state):   # noqa: D401
+    def load_state_dict(self, state):
         pass
 
     def on_validation_end(self, trainer, pl_module):
@@ -50,32 +39,26 @@ class OptunaPruningCallback(pl.callbacks.Callback):
         self.trial.report(float(metric), step=trainer.global_step)
         if self.trial.should_prune():
             raise optuna.TrialPruned()
-# ---------------------------------------------------------------------------
 
 
-# --------------------- 1 Optuna-trial = 1 complete training run ------------
+# 1 Optuna-trial = 1 complete training run
 def pl_one_run(
     config_path: str,
     overrides: list[str],
     trial: optuna.Trial | None = None,
     **cli_kwargs
 ) -> float:
-    """Train één keer en return beste val-loss (voor Optuna)."""
 
-    # 1) YAML laden + overrides toepassen
     cfg = OmegaConf.load(config_path)
     cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(overrides))
 
-    # 2) seeden (één unieke seed per trial)
     seed = cli_kwargs.get("seed", 42) + (trial.number if trial else 0)
     pl.seed_everything(seed, workers=True)
 
-    # 3) helper-checks & batch size per device (gelijk aan train.py)
     if cli_kwargs["batch_size"] % cli_kwargs["devices"] != 0:
         raise ValueError("Batch size must be divisible by the number of devices")
     batch_size_per_process = cli_kwargs["batch_size"] // cli_kwargs["devices"]
 
-    # 4) datamodule (identiek aan train.py – GEEN dubbele fp_option!)
     dm = ProjectionDataModule(
         cfg,
         batch_size=batch_size_per_process,
@@ -83,7 +66,6 @@ def pl_one_run(
         **cfg.data,
     )
 
-    # 5) experiment-naam / versie (gelijk aan train.py)
     cfg_name = get_config_name(config_path)
     vc_info = get_vc_info()
     exp_name = get_experiment_name(cfg_name, vc_info.display_version, vc_info.committed_at)
@@ -97,7 +79,6 @@ def pl_one_run(
     cfg.train.devices = cli_kwargs["devices"]
     cfg.train.num_nodes = cli_kwargs["num_nodes"]
 
-    # 6) model ­(zelfde call‐signature als train.py)
     model = SynformerWrapper(
         config=cfg,
         args={
@@ -110,7 +91,6 @@ def pl_one_run(
         },
     )
 
-    # event. checkpoint-resume (zelfde logica als train.py)
     if cli_kwargs.get("resume"):
         ckpt_path = cli_kwargs["resume"]
         print("Resuming decoder-/head-weights from checkpoint:", ckpt_path)
@@ -127,7 +107,6 @@ def pl_one_run(
         }
         model.load_state_dict(filtered, strict=False)
 
-    # optioneel: LoRA-layers bevriezen (zelfde als train.py)
     if cfg.model.decoder.lora:
         for name, param in model.named_parameters():
             if "lora" not in name and any([
@@ -142,7 +121,6 @@ def pl_one_run(
         print("Trainable parameters: lora_dec:\t",
               n_params(model.model.decoder.lora_dec, only_trainable=True))
 
-    # 7) callbacks
     checkpoint_cb = callbacks.ModelCheckpoint(
         save_last=True, monitor="val/loss", mode="min", save_top_k=5
     )
@@ -153,7 +131,6 @@ def pl_one_run(
     if prune_cb:
         cb_list.append(prune_cb)
 
-    # 8) trainer (zelfde argumenten + Optuna‐callbacks)
     trainer = pl.Trainer(
         accelerator=cfg.system.device,
         devices=cli_kwargs["devices"],
@@ -172,17 +149,12 @@ def pl_one_run(
         limit_val_batches=4,
     )
 
-    # 9) fit!
     trainer.fit(model, datamodule=dm)
 
-    # 10) Optuna minimaliseert val-loss
     return trainer.callback_metrics["val/loss"].item()
-# ---------------------------------------------------------------------------
 
 
-# ------------------------------- Optuna objective --------------------------
 def objective(trial: optuna.Trial, config_path: str, **cli_kwargs) -> float:
-    # hyper-parameters die we willen tunen
     lr         = trial.suggest_float("lr", 1e-6, 1e-3, log=True)
     wd         = trial.suggest_float("weight_decay", 0.0, 0.1, step=0.01)
     lora_rank  = trial.suggest_categorical("lora_rank", [8, 16, 32, 64, 128])
@@ -194,10 +166,9 @@ def objective(trial: optuna.Trial, config_path: str, **cli_kwargs) -> float:
     ]
 
     return pl_one_run(config_path, overrides, trial=trial, **cli_kwargs)
-# ---------------------------------------------------------------------------
 
 
-# ----------------------------- CLI / main entry ----------------------------
+# CLI 
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
 @click.option("--n-trials", type=int, default=20)
@@ -211,7 +182,7 @@ def objective(trial: optuna.Trial, config_path: str, **cli_kwargs) -> float:
 @click.option("--log-dir", default="./logs")
 @click.option("--resume", type=str, default=None)
 @click.option("--n-jobs", type=int, default=1,
-              help="Parallel Optuna trials – stel CUDA_VISIBLE_DEVICES in.")
+              help="Parallel Optuna trials.")
 def main(**cli_kwargs):
     mp.set_start_method("spawn", force=True)
 
