@@ -160,16 +160,23 @@ def pl_one_run(
 
     return trainer.callback_metrics["val/loss"].item()
 
-
 def objective(trial: optuna.Trial, config_path: str, **cli) -> float:
-    lr        = trial.suggest_float("lr", 1e-6, 1e-3, log=True)
-    wd        = trial.suggest_float("weight_decay", 0.0, 0.1, step=0.01)
-    lora_rank = trial.suggest_categorical("lora_rank", [8, 16, 32, 64, 128])
+    lr         = trial.suggest_float("lr", 1e-6, 1e-3, log=True)
+    wd         = trial.suggest_float("weight_decay", 0.0, 0.1, step=0.001)
+    lora_rank  = trial.suggest_categorical("lora_rank", [8, 16, 32, 64, 128])
+
+    factor     = trial.suggest_float("scheduler_factor", 0.1, 0.9)
+    patience   = trial.suggest_int("scheduler_patience", 1, 20)
+    min_lr     = trial.suggest_float("scheduler_min_lr", 1e-7, 1e-4, log=True)
 
     overrides = [
         f"train.optimizer.lr={lr}",
         f"train.optimizer.weight_decay={wd}",
         f"model.decoder.lora_rank={lora_rank}",
+        # scheduler-parameters
+        f"train.scheduler.factor={factor}",
+        f"train.scheduler.patience={patience}",
+        f"train.scheduler.min_lr={min_lr}",
     ]
 
     return pl_one_run(config_path, overrides, trial=trial, **cli)
@@ -179,7 +186,6 @@ def objective(trial: optuna.Trial, config_path: str, **cli) -> float:
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
 @click.option("--n-trials", type=int, default=20)
-@click.option("--storage", default="sqlite:///optuna.db")
 @click.option("--seed", type=int, default=42)
 @click.option("--batch-size", "-b", type=int, default=196)
 @click.option("--num-workers", type=int, default=8)
@@ -195,7 +201,6 @@ def main(**cli):
 
     study = optuna.create_study(
         direction="minimize",
-        storage=cli.pop("storage"),
         pruner=optuna.pruners.MedianPruner(n_warmup_steps=2),
     )
 
@@ -209,8 +214,6 @@ def main(**cli):
     best = study.best_trial
     print("\nBest val/loss =", best.value)
     print(json.dumps(best.params, indent=2))
-    print(f"\nLaunch dashboard:\n    optuna-dashboard {study._storage.url}\n")
-
 
 if __name__ == "__main__":
     main()
