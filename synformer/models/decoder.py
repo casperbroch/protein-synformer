@@ -52,7 +52,11 @@ class Decoder(nn.Module):
                     norm_first=True,
                 ),
                 num_layers=num_layers,
-                norm=nn.LayerNorm(d_model) if output_norm else None,
+                norm=(
+                    nn.LayerNorm(d_model) 
+                    if output_norm 
+                    else None
+                ),
             )
         else:
             # !!!
@@ -65,7 +69,11 @@ class Decoder(nn.Module):
                     norm_first=True,
                 ),
                 num_layers=num_layers,
-                norm=nn.LayerNorm(d_model) if output_norm else None,
+                norm=(
+                    nn.LayerNorm(d_model) 
+                    if output_norm 
+                    else None
+                ),
             )
             # !!!
         # !!!

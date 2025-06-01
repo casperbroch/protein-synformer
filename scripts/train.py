@@ -4,6 +4,7 @@ import warnings
 import click
 import pytorch_lightning as pl
 import torch
+from torch import nn 
 from omegaconf import OmegaConf
 from pytorch_lightning import callbacks, loggers, strategies
 import wandb
@@ -135,30 +136,51 @@ def main(
         )
     
     if config.model.decoder.lora:
-        # It might already be doing this automatically, but to be sure:
-        # Freezing: non-LoRA decoder, decoder heads 
-        # Not freezing: LoRA, encoder 
+        # We only want to apply LoRA to the decoder's self-attention, not the cross-attention.
+        # But we also don't want to use the pretrained cross-attention weights. 
+        # Instead, we re-initialize the cross-attention layers
+        # Ideally, I would remove LoRA from the cross-attention layers, but there isn't a nice way to
+        # do that, as far as I can tell. So, for now, I will just leave the LoRA layers.
+        # Also, I'm confused by how lora_pytorch handles freezing exactly, so just to be sure, 
+        # I will manually freeze those parameters we don't want to train. 
+        # (1) Re-initialize the cross-attention layers, remove LoRA from cross-attention
+        for name, module in model.named_modules():
+            # print(name)
+            if name.endswith("multihead_attn.module"):
+                # Re-initialize cross-attention parameters
+                if hasattr(module, "reset_parameters"):
+                    print("Re-initializing", name)
+                    module.reset_parameters()
+        # (2) It might already be doing this automatically when calling LoRA.from_module, but to be sure:
+        #     Freezing: decoder self-attn, linear, layernorm (all non-LoRA); decoder heads; decoder embeddings
+        #     Not freezing: LoRA; decoder cross-attn; encoder
         for name, param in model.named_parameters():
-            if "lora" not in name and any([
+            if "lora" not in name and "multihead_attn" not in name and any([
                 name.startswith("model.decoder"),
                 name.startswith("model.fingerprint_head"),
                 name.startswith("model.token_head"), 
                 name.startswith("model.reaction_head"),
             ]):
                 param.requires_grad = False
-        print("Parameters: model:\t\t", 
-              n_params(model))  # entire model 
-        print("Trainable parameters: model:\t", 
-              n_params(model, only_trainable=True))  # lora + encoder
-        print("Trainable parameters: lora_dec:\t", 
-              n_params(model.model.decoder.lora_dec, only_trainable=True))  # only lora 
+            # else:
+            #     print(param.numel(), "\t" + name)
+        print(n_params(model),
+              "\t" + "Parameters: model")  # entire model 
+        print(n_params(model, only_trainable=True),
+              "\t" + "Trainable parameters: model")  # lora + encoder
+        print(n_params(model.model.decoder.lora_dec, only_trainable=True),
+              "\t" + "Trainable parameters: lora_dec")  # only lora 
 
     # Train
     trainer = pl.Trainer(
         accelerator=config.system.device, 
         devices=devices,
         num_nodes=num_nodes,
-        strategy=strategies.DDPStrategy(static_graph=True, process_group_backend="gloo") if devices > 1 else "auto",
+        strategy=(
+            strategies.DDPStrategy(static_graph=True, process_group_backend="gloo") 
+            if devices > 1 
+            else "auto"
+        ),
         num_sanity_val_steps=num_sanity_val_steps,
         gradient_clip_val=config.train.max_grad_norm,
         log_every_n_steps=1,
