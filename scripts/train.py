@@ -111,6 +111,10 @@ def main(
         },
     )
     # print(model)
+    print(n_params(model),
+          "\t" + "Parameters: model")  # entire model 
+    print(n_params(model, only_trainable=True),
+          "\t" + "Trainable parameters: model")  # lora + encoder
 
     if resume:
         # Assuming: only resuming the decoder and decoder heads
@@ -135,6 +139,20 @@ def main(
             strict=False
         )
     
+        # Re-initialize the cross-attention layers
+        if config.model.decoder.reinit:
+            for name, module in model.named_modules():
+                # print(name)
+                if name.endswith("multihead_attn.module"):
+                    # Re-initialize cross-attention parameters
+                    if hasattr(module, "reset_parameters"):
+                        print("Re-initializing", name)
+                        module.reset_parameters()
+            # Print cross-attention weights: 
+            # for name, param in model.named_parameters():
+            #     if "multihead_attn" in name:
+            #         print(param.numel(), "\t" + f"Parameters: {name}")  
+
     if config.model.decoder.lora:
         # We only want to apply LoRA to the decoder's self-attention, not the cross-attention.
         # But we also don't want to use the pretrained cross-attention weights. 
@@ -143,14 +161,9 @@ def main(
         # do that, as far as I can tell. So, for now, I will just leave the LoRA layers.
         # Also, I'm confused by how lora_pytorch handles freezing exactly, so just to be sure, 
         # I will manually freeze those parameters we don't want to train. 
-        # (1) Re-initialize the cross-attention layers, remove LoRA from cross-attention
-        for name, module in model.named_modules():
-            # print(name)
-            if name.endswith("multihead_attn.module"):
-                # Re-initialize cross-attention parameters
-                if hasattr(module, "reset_parameters"):
-                    print("Re-initializing", name)
-                    module.reset_parameters()
+        # (1) Remove LoRA from cross-attention
+        #     TODO: currently, LoRA is still applied to cross-attention, even if the cross-attention
+        #     is newly initialized
         # (2) It might already be doing this automatically when calling LoRA.from_module, but to be sure:
         #     Freezing: decoder self-attn, linear, layernorm (all non-LoRA); decoder heads; decoder embeddings
         #     Not freezing: LoRA; decoder cross-attn; encoder
@@ -164,10 +177,6 @@ def main(
                 param.requires_grad = False
             # else:
             #     print(param.numel(), "\t" + name)
-        print(n_params(model),
-              "\t" + "Parameters: model")  # entire model 
-        print(n_params(model, only_trainable=True),
-              "\t" + "Trainable parameters: model")  # lora + encoder
         print(n_params(model.model.decoder.lora_dec, only_trainable=True),
               "\t" + "Trainable parameters: lora_dec")  # only lora 
 

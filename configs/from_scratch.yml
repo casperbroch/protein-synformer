@@ -4,7 +4,7 @@ system:
 project:
   # name: protein-synformer-2048-lora
   name: protein-synformer
-  # name: protein-synformer-optuna-trials
+  # name: protein-synformer-optuna-cross-attention-3
 
 chem:
   fp_option:
@@ -28,17 +28,16 @@ data:
 
 # TODO: use exactly those settings as sf_ed_default.ckpt
 model:
-  # !!
   encoder_type: protein 
   encoder:
-    d_model: 768  # must be same as decoder.d_model
-    d_protein: 1152  # ESM num embedding dimensions
-  # !!
+    d_model: 256  # ← changed from 768
+    d_protein: 1152  # (ignored)
+
   decoder:
-    d_model: 768
-    nhead: 16
-    dim_feedforward: 4096
-    num_layers: 10
+    d_model: 256           # ← changed from 768
+    nhead: 8               # ← changed from 16
+    dim_feedforward: 1024  # ← changed from 4096
+    num_layers: 8          # ← changed from 10
     pe_max_len: 32
     output_norm: false
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
@@ -46,11 +45,12 @@ model:
     reinit: true 
     lora: false
     lora_rank: 0 # Overwritten by Optuna when doing trials
+
   fingerprint_head_type: diffusion
   fingerprint_head:
-    d_model: 768
+    d_model: 256          # ← changed from 768
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
-    hidden_dim: 4096
+    hidden_dim: 1024      # ← changed from 4096
     diffusion_steps: 100
     diffusion_s: 0.01
 
@@ -65,13 +65,13 @@ train:
     reaction: 1.0
     fingerprint_diffusion: 0.0  # Multinomial diffusion loss does not drop
     fingerprint_bce: 0.5
-  max_epochs: 2
-  val_check_interval: 500
+  max_epochs: 24
+  val_check_interval: 200
   max_grad_norm: 100.0
   optimizer:
     type: adamw
-    lr: 3.e-4 # Overwritten by Optuna when doing trials
-    weight_decay: 0 # Overwritten by Optuna when doing trials
+    lr: 2.e-4 # Overwritten by Optuna when doing trials
+    weight_decay: 0.075 # Overwritten by Optuna when doing trials
     beta1: 0.9
     beta2: 0.999
   scheduler:

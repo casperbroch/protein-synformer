@@ -41,6 +41,7 @@ model:
     output_norm: false
     fingerprint_dim: ${chem.fp_option.morgan_n_bits}
     num_reaction_classes: 120
+    reinit: true 
     lora: true 
     lora_rank: 1
   fingerprint_head_type: diffusion_transformer
