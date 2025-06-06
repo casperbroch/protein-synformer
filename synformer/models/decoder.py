@@ -24,7 +24,7 @@ class Decoder(nn.Module):
         self,
         d_model: int = 512,
         nhead: int = 8,
-        dim_feedforward: int = 2048,
+        dim_feedforward: int = 2048,  # usually 4 * d_model 
         num_layers: int = 6,
         pe_max_len: int = 32,
         output_norm: bool = False,
