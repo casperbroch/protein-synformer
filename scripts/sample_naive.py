@@ -1,5 +1,7 @@
+# E.g. python -m scripts.sample_naive --model-path data/trained_weights/epoch=23-step=28076.ckpt --device cpu 
 import pathlib
 import pickle
+import pandas as pd 
 
 import click
 import torch
@@ -48,15 +50,21 @@ def featurize_smiles(smiles: str, device: torch.device, repeat: int = 1):
     return mol, feat
 
 
-@click.command()
-@click.option("--smiles", type=str, default="COc1ccc(-c2ccnc(Nc3ccccc3)n2)cc1")
-@click.option("--model-path", type=click.Path(exists=True, path_type=pathlib.Path), required=True)
-@click.option("--config-path", type=click.Path(exists=True, path_type=pathlib.Path), required=False, default=None)
-@click.option("--device", type=torch.device, default="cuda")
-@click.option("--repeat", type=int, default=100)
-def main(smiles, model_path: pathlib.Path, config_path: pathlib.Path | None, device: torch.device, repeat: int):
-    model, fpindex, rxn_matrix = load_model(model_path, config_path, device)
+def load_protein_molecule_pairs(protein_molecule_pairs_val_path="data/protein_molecule_pairs/papyrus_val_19399.csv"):
+    df_protein_molecule_pairs = pd.read_csv(protein_molecule_pairs_val_path)
+    df_protein_molecule_pairs["short_target_id"] = df_protein_molecule_pairs["target_id"].apply(lambda s: s.split("_")[0])
+    df_protein_molecule_pairs = df_protein_molecule_pairs.set_index("SMILES")
+    return df_protein_molecule_pairs
+
+
+def load_protein_embeddings(protein_embeddings_path="data/protein_embeddings/embeddings_selection_float16_4973.pth"):
+    with open(protein_embeddings_path, "rb") as f:
+        return torch.load(f, map_location=torch.device("cpu")) 
+
+
+def sample(smiles, target, model, fpindex, rxn_matrix, protein_embeddings, device, repeat=1):
     mol, feat = featurize_smiles(smiles, device, repeat=repeat)
+    feat["protein_embeddings"] = protein_embeddings[target].unsqueeze(0).float()
 
     with torch.inference_mode():
         result = model.generate_without_stack(
@@ -86,6 +94,25 @@ def main(smiles, model_path: pathlib.Path, config_path: pathlib.Path | None, dev
             print(f"{analog.sim(mol):.2f} {cnt_rxn} {ll_this:.4f} {analog.smiles}")
             cnt += 1
     print(f"Total: {cnt} / {len(stacks)}")
+
+
+@click.command()
+@click.option("--smiles", type=str, default="O=C(Nc1nnc(C2CC2)s1)C1CC(=O)N(c2cc3c(cc2)OCCO3)C1")
+@click.option("--target", type=str, default=None)  # protein ID as used in the Papyrus dataset, e.g. "Q9Y468_WT"
+@click.option("--model-path", type=click.Path(exists=True, path_type=pathlib.Path), required=True)
+@click.option("--config-path", type=click.Path(exists=True, path_type=pathlib.Path), required=False, default=None)
+@click.option("--device", type=torch.device, default="cuda")
+@click.option("--repeat", type=int, default=100)
+def main(smiles, target, model_path: pathlib.Path, config_path: pathlib.Path | None, device: torch.device, repeat: int):
+    model, fpindex, rxn_matrix = load_model(model_path, config_path, device)
+    protein_embeddings = load_protein_embeddings()
+    df_protein_molecule_pairs = load_protein_molecule_pairs()
+    if target is None:
+        print("Fetching a suitable protein target from the dataset...")
+        target = df_protein_molecule_pairs.loc[smiles, "target_id"]
+    print("SMILES:", smiles)
+    print("Target:", target)
+    sample(smiles, target, model, fpindex, rxn_matrix, protein_embeddings, device, repeat=repeat)
 
 
 if __name__ == "__main__":
