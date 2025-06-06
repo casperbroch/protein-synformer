@@ -7,7 +7,7 @@ from typing import cast
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset, Dataset
 
 from synformer.chem.fpindex import FingerprintIndex
 from synformer.chem.matrix import ReactantReactionMatrix
@@ -59,7 +59,7 @@ class Collater:
         return cast(ProjectionBatch, batch)
         
 
-class ProjectionDataset(IterableDataset[ProjectionData]):
+class ProjectionDataset(Dataset[ProjectionData]):
     def __init__(
         self,
         rxn_matrix: ReactantReactionMatrix,  
@@ -68,7 +68,6 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         protein_embeddings: dict, 
         synthetic_pathways: dict,  
         max_num_reactions: int = 5,
-        virtual_length: int = 65536,
         init_stack_weighted_ratio: float = 0.0,
         fp_option: FingerprintOption = FingerprintOption()
     ) -> None:
@@ -81,12 +80,11 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
         self._protein_embeddings = protein_embeddings 
         self._synthetic_pathways = synthetic_pathways 
         self._init_stack_weighted_ratio = init_stack_weighted_ratio
-        self._virtual_length = virtual_length
 
     def __len__(self) -> int:
-        return self._virtual_length
+        return len(self._protein_molecule_pairs)
 
-    def __iter__(self):
+    def __getitem__(self, idx):
         """
         Iterate over protein-molecule pairs and yield appropriate data for each pair,
         which includes both the encoder data (protein embeddings) and the decoder data 
@@ -138,53 +136,53 @@ class ProjectionDataset(IterableDataset[ProjectionData]):
             'rxn_seq': (None, None, <synformer.chem.reaction.Reaction object>)  # ?
         } 
         """
-        for smiles, protein_id in self._protein_molecule_pairs:
-            if smiles in self._synthetic_pathways and protein_id in self._protein_embeddings:
-                pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.long)
-                token_types = pathway[:, 0]
-                rxn_indices = torch.where(pathway[:,0] == TokenType.REACTION, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
-                reactant_indices = torch.where(pathway[:,0] == TokenType.REACTANT, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
-                # If reactant_idx == 0, it's a reaction, so we use a zero-vector for its fingerprint
-                reactant_fps = torch.tensor(
-                    np.array([
-                        self._fpindex._fp[reactant_idx] 
-                        if reactant_idx != 0 
-                        else np.zeros(self._fp_option.morgan_n_bits) 
-                        for reactant_idx in reactant_indices 
-                    ]),
-                    dtype=torch.float32
-                )
-                protein_embeddings = self._protein_embeddings[protein_id].to(torch.float32)
-                token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
-                # I assume it's n_tokens-2 elements (minus start, end tokens); see example below: 3 elements 
-                #  so I skip the start and end tokens
-                mol_seq_full = [
-                    self._fpindex.molecules[reactant_idx]  
+        smiles, protein_id = self._protein_molecule_pairs[idx]
+        if smiles in self._synthetic_pathways and protein_id in self._protein_embeddings:
+            pathway = torch.tensor(self._synthetic_pathways[smiles], dtype=torch.long)
+            token_types = pathway[:, 0]
+            rxn_indices = torch.where(pathway[:,0] == TokenType.REACTION, pathway[:,1], 0)  # extract rxn_indices; fill others with 0 
+            reactant_indices = torch.where(pathway[:,0] == TokenType.REACTANT, pathway[:,1], 0)  # extract reactant_indices; fill others with 0 
+            # If reactant_idx == 0, it's a reaction, so we use a zero-vector for its fingerprint
+            reactant_fps = torch.tensor(
+                np.array([
+                    self._fpindex._fp[reactant_idx] 
                     if reactant_idx != 0 
-                    else None
-                    for reactant_idx in reactant_indices[1:-1] 
-                ]
-                rxn_seq_full = [
-                    self._rxn_matrix.reactions[rxn_idx]  # rxn_matrix.reactions[rxn_idx] returns Reaction object
-                    if rxn_idx != 0 
-                    else None
-                    for rxn_idx in rxn_indices[1:-1] 
-                ]
-                data: "ProjectionData" = {
-                    # Encoder data (protein):
-                    "protein_embeddings": protein_embeddings,
-                    
-                    # Decoder data (synthetic pathway):
-                    "token_types": token_types,
-                    "rxn_indices": rxn_indices,
-                    "reactant_fps": reactant_fps,
-                    "token_padding_mask": token_padding_mask,
-                    
-                    # Auxiliary data:
-                    "mol_seq": mol_seq_full, 
-                    "rxn_seq": rxn_seq_full
-                }
-                yield data 
+                    else np.zeros(self._fp_option.morgan_n_bits) 
+                    for reactant_idx in reactant_indices 
+                ]),
+                dtype=torch.float32
+            )
+            protein_embeddings = self._protein_embeddings[protein_id].to(torch.float32)
+            token_padding_mask = torch.zeros_like(token_types, dtype=torch.bool)
+            # I assume it's n_tokens-2 elements (minus start, end tokens); see example below: 3 elements 
+            #  so I skip the start and end tokens
+            mol_seq_full = [
+                self._fpindex.molecules[reactant_idx]  
+                if reactant_idx != 0 
+                else None
+                for reactant_idx in reactant_indices[1:-1] 
+            ]
+            rxn_seq_full = [
+                self._rxn_matrix.reactions[rxn_idx]  # rxn_matrix.reactions[rxn_idx] returns Reaction object
+                if rxn_idx != 0 
+                else None
+                for rxn_idx in rxn_indices[1:-1] 
+            ]
+            data: "ProjectionData" = {
+                # Encoder data (protein):
+                "protein_embeddings": protein_embeddings,
+                
+                # Decoder data (synthetic pathway):
+                "token_types": token_types,
+                "rxn_indices": rxn_indices,
+                "reactant_fps": reactant_fps,
+                "token_padding_mask": token_padding_mask,
+                
+                # Auxiliary data:
+                "mol_seq": mol_seq_full, 
+                "rxn_seq": rxn_seq_full
+            }
+            return data 
 
 
 class ProjectionDataModule(pl.LightningDataModule):
@@ -262,7 +260,6 @@ class ProjectionDataModule(pl.LightningDataModule):
             protein_molecule_pairs=protein_molecule_pairs_train,
             protein_embeddings=protein_embeddings,
             synthetic_pathways=synthetic_pathways,
-            virtual_length=len(protein_molecule_pairs_train),
             fp_option=self.config.chem.fp_option,
             **self.dataset_options,
         )
@@ -273,7 +270,6 @@ class ProjectionDataModule(pl.LightningDataModule):
             protein_molecule_pairs=protein_molecule_pairs_val,
             protein_embeddings=protein_embeddings,
             synthetic_pathways=synthetic_pathways,
-            virtual_length=self.batch_size,
             fp_option=self.config.chem.fp_option,
             **self.dataset_options,
         )
@@ -283,6 +279,7 @@ class ProjectionDataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
+            shuffle=True,
             num_workers=self.num_workers,
             drop_last=True,
             collate_fn=Collater(),
@@ -295,6 +292,7 @@ class ProjectionDataModule(pl.LightningDataModule):
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
+            shuffle=False,
             num_workers=1,
             collate_fn=Collater(),
             worker_init_fn=worker_init_fn,
@@ -304,6 +302,7 @@ class ProjectionDataModule(pl.LightningDataModule):
 
 
 # TODO: modify to enable protein embeddings and synthetic pathways
+"""
 class ProjectionDataModuleForSample(pl.LightningDataModule):
     def __init__(
         self,
@@ -347,14 +346,14 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_embeddings=protein_embeddings,
-            virtual_length=len(protein_molecule_pairs_train),
+            # virtual_length=self.config.train.val_check_interval * self.batch_size,  # len(protein_molecule_pairs_train) ?
             **self.dataset_options,
         )
         self.val_dataset = ProjectionDataset(
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
             protein_embeddings=protein_embeddings,
-            virtual_length=self.batch_size,
+            # virtual_length=self.batch_size,
             **self.dataset_options,
         )
 
@@ -380,3 +379,4 @@ class ProjectionDataModuleForSample(pl.LightningDataModule):
             persistent_workers=True,
             pin_memory=True,
         )
+""" 
