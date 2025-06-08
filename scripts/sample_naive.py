@@ -64,8 +64,7 @@ def load_protein_embeddings(protein_embeddings_path="data/protein_embeddings/emb
 
 def sample(smiles, target, model, fpindex, rxn_matrix, protein_embeddings, device, repeat=1):
     mol, feat = featurize_smiles(smiles, device, repeat=repeat)
-    feat["protein_embeddings"] = protein_embeddings[target].unsqueeze(0).float()
-
+    feat["protein_embeddings"] = protein_embeddings[target].unsqueeze(0).repeat(repeat, 1, 1).float()
     with torch.inference_mode():
         result = model.generate_without_stack(
             feat,
@@ -83,17 +82,24 @@ def sample(smiles, target, model, fpindex, rxn_matrix, protein_embeddings, devic
             reactant_fps=result.reactant_fps,
             token_padding_mask=result.token_padding_mask,
         )
-
     stacks = result.build()
     cnt = 0
+    info = {}
     for i, stack in enumerate(stacks):
         if stack.get_stack_depth() == 1:
             analog = stack.get_one_top()
-            ll_this = ll["total"][i].sum().item()
-            cnt_rxn = stack.count_reactions()
-            print(f"{analog.sim(mol):.2f} {cnt_rxn} {ll_this:.4f} {analog.smiles}")
             cnt += 1
-    print(f"Total: {cnt} / {len(stacks)}")
+            info[i] = {
+                "smiles": analog.smiles,
+                "analog": analog,
+                "stack": stack,
+                "ll": ll["total"][i].sum().item(),
+                "cnt_rxn": stack.count_reactions(), 
+                "similarity": analog.sim(mol)
+            }
+            # print({k: v for k, v in info[i].items() if k in ("ll", "cnt_rxn", "similarity")})
+    # print(f"Total: {cnt} / {len(stacks)}")
+    return info, result 
 
 
 @click.command()
