@@ -85,8 +85,7 @@ def main(
                 sync_tensorboard=True,
                 config=OmegaConf.to_container(config), 
                 name=config.train.exp_name, 
-                save_code=False,
-                # resume=True
+                save_code=False
             )
 
     # Dataloaders
@@ -96,7 +95,6 @@ def main(
         num_workers=num_workers,
         **config.data,
     )
-    # print(datamodule)
 
     # Model
     model = SynformerWrapper(
@@ -110,14 +108,10 @@ def main(
             "resume": resume,
         },
     )
-    # print(model)
-    print(n_params(model),
-          "\t" + "Parameters: model")  # entire model 
-    print(n_params(model, only_trainable=True),
-          "\t" + "Trainable parameters: model")  # lora + encoder
 
     if resume:
-        # Assuming: only resuming the decoder and decoder heads
+        # Assuming: only resuming the decoder (or parts of the decoder) and decoder heads
+        #  but not the encoder or other parts
         print("Resuming from checkpoint:", resume)
         if config.system.device == "cpu":
             ckpt = torch.load(resume, map_location="cpu")
@@ -138,9 +132,8 @@ def main(
             filtered_state_dict, 
             strict=False
         )
-    
         # Re-initialize the cross-attention layers
-        if config.model.decoder.reinit:
+        if OmegaConf.select(config, "model.decoder.reinit"):
             for name, module in model.named_modules():
                 # print(name)
                 if name.endswith("multihead_attn.module"):
@@ -149,11 +142,21 @@ def main(
                         print("Re-initializing", name)
                         module.reset_parameters()
             # Print cross-attention weights: 
-            # for name, param in model.named_parameters():
-            #     if "multihead_attn" in name:
-            #         print(param.numel(), "\t" + f"Parameters: {name}")  
+            '''
+            for name, param in model.named_parameters():
+                if "multihead_attn" in name:
+                    print(param.numel(), "\t" + f"Parameters: {name}")
+            '''
 
-    if config.model.decoder.lora:
+    if OmegaConf.select(config, "model.decoder.lora"):
+        assert resume, \
+            "The option `lora` is currently only supported when resuming from a checkpoint."
+        assert not OmegaConf.select(config, "model.decoder.last_n_layers"), \
+            "The option `lora` is currently not supported in combination with `last_n_layers`."
+        # TODO: deal with interaction between last_n_layers and lora options
+        #  E.g. if last_n_layers is true, only add lora to the last n layers, except for cross-attention ??
+        assert OmegaConf.select(config, "model.decoder.lora_rank"), \
+            "The field `model.decoder.lora_rank` is missing."
         # We only want to apply LoRA to the decoder's self-attention, not the cross-attention.
         # But we also don't want to use the pretrained cross-attention weights. 
         # Instead, we re-initialize the cross-attention layers
@@ -175,10 +178,44 @@ def main(
                 name.startswith("model.reaction_head"),
             ]):
                 param.requires_grad = False
-            # else:
-            #     print(param.numel(), "\t" + name)
         print(n_params(model.model.decoder.lora_dec, only_trainable=True),
               "\t" + "Trainable parameters: lora_dec")  # only lora 
+
+    if OmegaConf.select(config, "model.decoder.last_n_layers"):
+        assert resume, \
+            "The option `last_n_layers` is currently only supported when resuming from a checkpoint."
+        assert not OmegaConf.select(config, "model.decoder.lora"), \
+            "The option `lora` is currently not supported in combination with `last_n_layers`."
+        assert OmegaConf.select(config, "model.decoder.num_trainable_layers"), \
+            "The field `model.decoder.num_trainable_layers` is missing."
+        # Get config of how many layers to train 
+        num_trainable_layers = OmegaConf.select(config, "model.decoder.num_trainable_layers")
+        print(f"Only training last {num_trainable_layers} layers (and cross-attention across all layers)")
+        # Determine the number of decoder layers
+        num_decoder_layers = len(list(set(
+            int(name.split(".")[4]) 
+            for name, _ in model.named_parameters()
+            if name.startswith("model.decoder.dec.layers")
+        )))
+        print("Found", num_decoder_layers, "decoder layers")
+        # Freeze all layers except for the last N layers and all the cross-attention layers 
+        print("Freezing layers", f"1...{num_decoder_layers-num_trainable_layers}", "(except for cross-attention)")
+        print("Training layers", f"{num_decoder_layers-num_trainable_layers+1}...{num_decoder_layers}")
+        for name, param in model.named_parameters():
+            if name.startswith("model.decoder.dec.layers"):
+                layer_idx = int(name.split(".")[4])
+                if (layer_idx < num_decoder_layers - num_trainable_layers 
+                        and "multihead_attn" not in name):
+                        # and "lora_module" not in name):
+                    print("Freeze", (layer_idx, name))
+                    param.requires_grad = False
+                else:
+                    print("Train ", (layer_idx, name))
+
+    print(n_params(model),
+          "\t" + "Parameters: model")  
+    print(n_params(model, only_trainable=True),
+          "\t" + "Trainable parameters: model") 
 
     # Train
     trainer = pl.Trainer(

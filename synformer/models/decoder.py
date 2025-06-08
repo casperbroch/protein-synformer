@@ -31,9 +31,9 @@ class Decoder(nn.Module):
         fingerprint_dim: int = 2048,
         num_reaction_classes: int = 120,
         decoder_only: bool = False,
-        reinit: bool = False,
         lora: bool = False,
         lora_rank: int = 8,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.d_model = d_model
