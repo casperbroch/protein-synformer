@@ -64,7 +64,10 @@ def main(
             rxn_matrix, 
             protein_embeddings, 
             config.system.device, 
-            repeat=repeat
+            repeat=repeat,
+            # temperature_token=...,
+            # temperature_reactant=...,
+            # temperature_reaction=...
         )
         # TODO: this saves all generations, even ones that do not result in a valid molecule 
         #  Probably makes sense to only keep successful ones? i.e. those that are in info's keys 
@@ -102,14 +105,14 @@ def main(
     
     # Save to files
     timestamp = dt.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-    info_path = os.path.join(ckpt_evaluations_path, f"info {timestamp}.pkl")
+    info_path = os.path.join(ckpt_evaluations_path, f"infos {timestamp}.pkl")
     with open(info_path, "wb") as f:
         print(f"Saving to {info_path}")
-        pickle.dump(info, f)
-    result_path = os.path.join(ckpt_evaluations_path, f"result {timestamp}.pkl")
+        pickle.dump(infos, f)
+    result_path = os.path.join(ckpt_evaluations_path, f"results {timestamp}.pkl")
     with open(result_path, "wb") as f:
         print(f"Saving to {result_path}")
-        pickle.dump(result, f)
+        pickle.dump(results, f)
 
 
 if __name__ == "__main__":

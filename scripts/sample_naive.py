@@ -31,7 +31,10 @@ def main(
         protein_embeddings, 
         device, 
         true_smiles=smiles, 
-        repeat=repeat
+        repeat=repeat,
+        # temperature_token=...,
+        # temperature_reactant=...,
+        # temperature_reaction=...
     )
 
 

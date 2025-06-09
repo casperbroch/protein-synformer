@@ -58,7 +58,19 @@ def load_protein_embeddings(path="data/protein_embeddings/embeddings_selection_f
         return torch.load(f, map_location=torch.device("cpu")) 
 
 
-def sample(target, model, fpindex, rxn_matrix, protein_embeddings, device, true_smiles=None, repeat=1):
+def sample(
+        target, 
+        model, 
+        fpindex, 
+        rxn_matrix, 
+        protein_embeddings, 
+        device, 
+        true_smiles=None, 
+        repeat=1,
+        temperature_token=1.0,
+        temperature_reactant=0.1,
+        temperature_reaction=1.0
+    ):
     if true_smiles is not None:
         mol, feat = featurize_smiles(true_smiles, device, repeat=repeat)
     else:
@@ -69,9 +81,9 @@ def sample(target, model, fpindex, rxn_matrix, protein_embeddings, device, true_
             feat,
             rxn_matrix=rxn_matrix,
             fpindex=fpindex,
-            temperature_token=1.0,
-            temperature_reactant=0.1,
-            temperature_reaction=1.0,
+            temperature_token=temperature_token,
+            temperature_reactant=temperature_reactant,
+            temperature_reaction=temperature_reaction
         )
         ll = model.get_log_likelihood(
             code=result.code,
