@@ -57,7 +57,7 @@ def main(
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
     exp_ver = get_experiment_version()
 
-    if config.system.device == "gpu" and torch.cuda.is_available():
+    if config.system.device in ("gpu", "cuda") and torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.set_float32_matmul_precision("medium")
@@ -246,20 +246,6 @@ def main(
         datamodule=datamodule
     )
     print("Finished training")
-
-    '''
-    if config.model.decoder.lora:
-        # Save LoRA weights 
-        #
-        #
-        #
-        # Merge LoRA weights into the original model weights
-        print("Merging...")
-        merged_decoder = model.model.decoder.lora_dec.merge_lora() 
-        # How to save inside of model? and delete lora_dec?
-        ...
-    '''
-
 
 if __name__ == "__main__":
     main()
