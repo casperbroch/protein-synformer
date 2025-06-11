@@ -18,11 +18,16 @@ class SMILESEncoder(BaseEncoder):
     ):
         super().__init__()
         self._dim = d_model
+
+        # Token embedding for SMILES input
         self.smiles_emb = nn.Embedding(num_token_types, d_model, padding_idx=0)
+
+        # Add positional encoding
         self.pe_enc = PositionalEncoding(
             d_model=d_model,
             max_len=pe_max_len,
         )
+
         self.enc = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(
                 d_model=d_model,
@@ -41,10 +46,18 @@ class SMILESEncoder(BaseEncoder):
         return self._dim
 
     def forward(self, batch: ProjectionBatch):
+        # Check if SMILES input is present
         if "smiles" not in batch:
             raise ValueError("smiles must be in batch")
+
         smiles = batch["smiles"]
+        # Embed tokens and add positional encoding
         h = self.pe_enc(self.smiles_emb(smiles))
-        padding_mask = smiles == 0  # the positions with the value of True will be ignored
+
+        # Mask padding tokens
+        padding_mask = smiles == 0
+
+        # Run transformer encoder
         out = self.enc(h, src_key_padding_mask=padding_mask)
+
         return EncoderOutput(out, padding_mask)

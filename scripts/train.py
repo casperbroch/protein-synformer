@@ -9,6 +9,7 @@ from omegaconf import OmegaConf
 from pytorch_lightning import callbacks, loggers, strategies
 import wandb
 
+# Project-specific modules
 from synformer.data.projection_dataset_new import ProjectionDataModule  
 from synformer.models.wrapper import SynformerWrapper
 from synformer.utils.misc import (
@@ -26,7 +27,7 @@ from synformer.utils.misc import n_params
 @click.option("--debug", is_flag=True)
 @click.option("--batch-size", "-b", type=int, default=196)
 @click.option("--num-workers", type=int, default=8)
-@click.option("--devices", type=int, default=1)  # default=4
+@click.option("--devices", type=int, default=1)
 @click.option("--num-nodes", type=int, default=int(os.environ.get("NUM_NODES", 1)))
 @click.option("--num-sanity-val-steps", type=int, default=1)
 @click.option("--log-dir", type=click.Path(dir_okay=True, file_okay=False), default="./logs")
@@ -43,6 +44,7 @@ def main(
     log_dir: str,
     resume: str | None,
 ):
+    # Ensure batch size is divisible across devices
     if batch_size % devices != 0:
         raise ValueError("Batch size must be divisible by the number of devices")
     batch_size_per_process = batch_size // devices
@@ -50,6 +52,7 @@ def main(
     os.makedirs(log_dir, exist_ok=True)
     pl.seed_everything(seed)
 
+    # Load config and experiment metadata
     config = OmegaConf.load(config_path)
     config_name = get_config_name(config_path)
     vc_info = get_vc_info()
@@ -57,12 +60,13 @@ def main(
     exp_name = get_experiment_name(config_name, vc_info.display_version, vc_info.committed_at)
     exp_ver = get_experiment_version()
 
+    # Enable performance options if using GPU
     if config.system.device in ("gpu", "cuda") and torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.set_float32_matmul_precision("medium")
 
-    # Add flags (click options) to config for convenience
+    # Inject CLI values into config
     config.train.exp_name = exp_name
     config.train.exp_ver = exp_ver
     config.train.seed = seed
@@ -72,7 +76,7 @@ def main(
     config.train.devices = devices
     config.train.num_nodes = num_nodes
 
-    # Monitoring
+    # Initialize WandB logging if enabled
     if not os.path.exists("configs/wandb.yml"):
         warnings.warn("No wandb config found! Not using wandb.")
     else:
@@ -88,7 +92,7 @@ def main(
                 save_code=False
             )
 
-    # Dataloaders
+    # Initialize dataloader
     datamodule = ProjectionDataModule(
         config,
         batch_size=batch_size_per_process,
@@ -96,7 +100,7 @@ def main(
         **config.data,
     )
 
-    # Model
+    # Initialize model
     model = SynformerWrapper(
         config=config,
         args={
@@ -109,14 +113,10 @@ def main(
         },
     )
 
+    # Resume checkpoint if specified
     if resume:
-        # Assuming: only resuming the decoder (or parts of the decoder) and decoder heads
-        #  but not the encoder or other parts
         print("Resuming from checkpoint:", resume)
-        if config.system.device == "cpu":
-            ckpt = torch.load(resume, map_location="cpu")
-        else:
-            ckpt = torch.load(resume)
+        ckpt = torch.load(resume, map_location="cpu" if config.system.device == "cpu" else None)
         state_dict = ckpt["state_dict"]
         filtered_state_dict = {
             k: v
@@ -128,48 +128,24 @@ def main(
                 k.startswith("model.reaction_head."),
             ])
         }
-        model.load_state_dict(
-            filtered_state_dict, 
-            strict=False
-        )
-        # Re-initialize the cross-attention layers
+        model.load_state_dict(filtered_state_dict, strict=False)
+
+        # Reinitialize cross-attention layers if needed
         if OmegaConf.select(config, "model.decoder.reinit"):
             for name, module in model.named_modules():
-                # print(name)
-                if name.endswith("multihead_attn.module"):
-                    # Re-initialize cross-attention parameters
-                    if hasattr(module, "reset_parameters"):
-                        print("Re-initializing", name)
-                        module.reset_parameters()
-            # Print cross-attention weights: 
-            '''
-            for name, param in model.named_parameters():
-                if "multihead_attn" in name:
-                    print(param.numel(), "\t" + f"Parameters: {name}")
-            '''
+                if name.endswith("multihead_attn.module") and hasattr(module, "reset_parameters"):
+                    print("Re-initializing", name)
+                    module.reset_parameters()
 
+    # Handle LoRA fine-tuning if enabled
     if OmegaConf.select(config, "model.decoder.lora"):
-        assert resume, \
-            "The option `lora` is currently only supported when resuming from a checkpoint."
+        assert resume, "LoRA requires resuming from a checkpoint."
         assert not OmegaConf.select(config, "model.decoder.last_n_layers"), \
-            "The option `lora` is currently not supported in combination with `last_n_layers`."
-        # TODO: deal with interaction between last_n_layers and lora options
-        #  E.g. if last_n_layers is true, only add lora to the last n layers, except for cross-attention ??
+            "LoRA cannot be combined with last_n_layers."
         assert OmegaConf.select(config, "model.decoder.lora_rank"), \
-            "The field `model.decoder.lora_rank` is missing."
-        # We only want to apply LoRA to the decoder's self-attention, not the cross-attention.
-        # But we also don't want to use the pretrained cross-attention weights. 
-        # Instead, we re-initialize the cross-attention layers
-        # Ideally, I would remove LoRA from the cross-attention layers, but there isn't a nice way to
-        # do that, as far as I can tell. So, for now, I will just leave the LoRA layers.
-        # Also, I'm confused by how lora_pytorch handles freezing exactly, so just to be sure, 
-        # I will manually freeze those parameters we don't want to train. 
-        # (1) Remove LoRA from cross-attention
-        #     TODO: currently, LoRA is still applied to cross-attention, even if the cross-attention
-        #     is newly initialized
-        # (2) It might already be doing this automatically when calling LoRA.from_module, but to be sure:
-        #     Freezing: decoder self-attn, linear, layernorm (all non-LoRA); decoder heads; decoder embeddings
-        #     Not freezing: LoRA; decoder cross-attn; encoder
+            "Missing LoRA rank in config."
+
+        # Freeze all non-LoRA parameters in decoder and heads
         for name, param in model.named_parameters():
             if "lora" not in name and "multihead_attn" not in name and any([
                 name.startswith("model.decoder"),
@@ -178,46 +154,42 @@ def main(
                 name.startswith("model.reaction_head"),
             ]):
                 param.requires_grad = False
-        print(n_params(model.model.decoder.lora_dec, only_trainable=True),
-              "\t" + "Trainable parameters: lora_dec")  # only lora 
 
+        print(n_params(model.model.decoder.lora_dec, only_trainable=True),
+              "\t" + "Trainable parameters: lora_dec")
+
+    # Handle training of only the last N decoder layers
     if OmegaConf.select(config, "model.decoder.last_n_layers"):
-        assert resume, \
-            "The option `last_n_layers` is currently only supported when resuming from a checkpoint."
+        assert resume, "last_n_layers requires resuming from a checkpoint."
         assert not OmegaConf.select(config, "model.decoder.lora"), \
-            "The option `lora` is currently not supported in combination with `last_n_layers`."
+            "Cannot combine last_n_layers with LoRA."
         assert OmegaConf.select(config, "model.decoder.num_trainable_layers"), \
-            "The field `model.decoder.num_trainable_layers` is missing."
-        # Get config of how many layers to train 
+            "Missing num_trainable_layers in config."
+
         num_trainable_layers = OmegaConf.select(config, "model.decoder.num_trainable_layers")
-        print(f"Only training last {num_trainable_layers} layers (and cross-attention across all layers)")
-        # Determine the number of decoder layers
+        print(f"Only training last {num_trainable_layers} layers (cross-attn stays trainable)")
+
         num_decoder_layers = len(list(set(
             int(name.split(".")[4]) 
             for name, _ in model.named_parameters()
             if name.startswith("model.decoder.dec.layers")
         )))
         print("Found", num_decoder_layers, "decoder layers")
-        # Freeze all layers except for the last N layers and all the cross-attention layers 
-        print("Freezing layers", f"1...{num_decoder_layers-num_trainable_layers}", "(except for cross-attention)")
-        print("Training layers", f"{num_decoder_layers-num_trainable_layers+1}...{num_decoder_layers}")
+
         for name, param in model.named_parameters():
             if name.startswith("model.decoder.dec.layers"):
                 layer_idx = int(name.split(".")[4])
-                if (layer_idx < num_decoder_layers - num_trainable_layers 
-                        and "multihead_attn" not in name):
-                        # and "lora_module" not in name):
+                if layer_idx < num_decoder_layers - num_trainable_layers and "multihead_attn" not in name:
                     print("Freeze", (layer_idx, name))
                     param.requires_grad = False
                 else:
                     print("Train ", (layer_idx, name))
 
-    print(n_params(model),
-          "\t" + "Parameters: model")  
-    print(n_params(model, only_trainable=True),
-          "\t" + "Trainable parameters: model") 
+    # Print parameter counts
+    print(n_params(model), "\t" + "Parameters: model")  
+    print(n_params(model, only_trainable=True), "\t" + "Trainable parameters: model") 
 
-    # Train
+    # Initialize PyTorch Lightning trainer
     trainer = pl.Trainer(
         accelerator=config.system.device, 
         devices=devices,
@@ -241,11 +213,11 @@ def main(
         val_check_interval=config.train.val_check_interval,
         limit_val_batches=4,
     )
-    trainer.fit(
-        model, 
-        datamodule=datamodule
-    )
+
+    # Start training
+    trainer.fit(model, datamodule=datamodule)
     print("Finished training")
+
 
 if __name__ == "__main__":
     main()

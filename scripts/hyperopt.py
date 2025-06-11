@@ -3,6 +3,7 @@ import click, optuna, pytorch_lightning as pl, torch, wandb
 from pytorch_lightning import callbacks, loggers, strategies
 from omegaconf import OmegaConf
 
+# Project-specific imports
 from synformer.data.projection_dataset_new import ProjectionDataModule
 from synformer.models.wrapper import SynformerWrapper
 from synformer.utils.misc import (
@@ -10,12 +11,13 @@ from synformer.utils.misc import (
 )
 from synformer.utils.vc import get_vc_info
 
+# Enable performance optimizations for matrix multiplications
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32  = True
 torch.set_float32_matmul_precision("medium")
 
 
-# Optuna pruning
+# Optuna pruning callback
 class OptunaPruningCallback(pl.callbacks.Callback):
     def __init__(self, trial: optuna.Trial, monitor: str = "val/loss"):
         self.trial, self.monitor = trial, monitor
@@ -23,6 +25,7 @@ class OptunaPruningCallback(pl.callbacks.Callback):
     def state_dict(self):            return {}
     def load_state_dict(self, _):    pass
 
+    # Called at the end of each validation loop
     def on_validation_end(self, trainer, pl_module):
         metric = trainer.callback_metrics.get(self.monitor)
         if metric is None:
@@ -32,24 +35,28 @@ class OptunaPruningCallback(pl.callbacks.Callback):
             raise optuna.TrialPruned()
 
 
-# 1 Optuna-trial
+# Runs a single PyTorch Lightning training trial
 def pl_one_run(
     config_path: str,
     overrides: list[str],
     trial: optuna.Trial | None = None,
     **cli,
 ) -> float:
+    # Load and merge configuration
     cfg = OmegaConf.load(config_path)
     cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(overrides))
     print(cfg)
 
+    # Set seed for reproducibility
     seed = cli.get("seed", 42) + (trial.number if trial else 0)
     pl.seed_everything(seed, workers=True)
 
+    # Ensure batch size is divisible by number of devices
     if cli["batch_size"] % cli["devices"] != 0:
         raise ValueError("Batch size must be divisible by the number of devices")
     bs_per_proc = cli["batch_size"] // cli["devices"]
 
+    # Initialize dataloader module
     dm = ProjectionDataModule(
         cfg,
         batch_size=bs_per_proc,
@@ -57,11 +64,13 @@ def pl_one_run(
         **cfg.data,
     )
 
+    # Generate experiment metadata
     cfg_name = get_config_name(config_path)
     vc_info  = get_vc_info()
     exp_name = get_experiment_name(cfg_name, vc_info.display_version, vc_info.committed_at)
     exp_ver  = get_experiment_version()
 
+    # Update training config
     cfg.train.exp_name = exp_name
     cfg.train.exp_ver  = exp_ver
     cfg.train.seed     = seed
@@ -70,6 +79,7 @@ def pl_one_run(
     cfg.train.devices      = cli["devices"]
     cfg.train.num_nodes    = cli["num_nodes"]
 
+    # Initialize wandb logging if config exists
     if not os.path.exists("configs/wandb.yml"):
         warnings.warn("No wandb config found! Not using wandb.")
         wandb_run = None
@@ -91,6 +101,7 @@ def pl_one_run(
         else:
             wandb_run = None
 
+    # Create model wrapper
     model = SynformerWrapper(
         config=cfg,
         args={
@@ -103,6 +114,7 @@ def pl_one_run(
         },
     )
 
+    # Load model weights if resuming from checkpoint
     if cli.get("resume"):
         ckpt_path = cli["resume"]
         print("Resuming decoder-/head-weights from checkpoint:", ckpt_path)
@@ -118,6 +130,7 @@ def pl_one_run(
             strict=False,
         )
 
+    # If using LoRA: freeze base model parameters
     if cfg.model.decoder.lora:
         for n, p in model.named_parameters():
             if "lora" not in n and any([
@@ -132,12 +145,14 @@ def pl_one_run(
         print("Trainable parameters: lora_dec:\t",
               n_params(model.model.decoder.lora_dec, only_trainable=True))
 
+    # Define callbacks
     ckpt_cb  = callbacks.ModelCheckpoint(save_last=True, monitor="val/loss",
                                          mode="min", save_top_k=5)
     lr_cb    = callbacks.LearningRateMonitor(logging_interval="step")
     prune_cb = OptunaPruningCallback(trial, "val/loss") if trial else None
     cb_list  = [ckpt_cb, lr_cb] + ([prune_cb] if prune_cb else [])
 
+    # Initialize PyTorch Lightning trainer
     trainer = pl.Trainer(
         accelerator=cfg.system.device,
         devices=cli["devices"],
@@ -156,14 +171,19 @@ def pl_one_run(
         val_check_interval=cfg.train.val_check_interval,
     )
 
+    # Start training
     trainer.fit(model, datamodule=dm)
 
+    # Finalize wandb if used
     if wandb_run is not None:
         wandb_run.finish()
 
+    # Return final validation loss
     return trainer.callback_metrics["val/loss"].item()
 
+# Optuna objective function for one trial
 def objective(trial: optuna.Trial, config_path: str, **cli) -> float:
+    # Suggest hyperparameters to try
     lr         = trial.suggest_float("lr", 1e-6, 1e-3, log=True)
     wd         = trial.suggest_float("weight_decay", 0.0, 0.1, step=0.001)
     lora_rank  = trial.suggest_categorical("lora_rank", [8, 16, 32, 64, 128])
@@ -172,20 +192,21 @@ def objective(trial: optuna.Trial, config_path: str, **cli) -> float:
     patience   = trial.suggest_int("scheduler_patience", 1, 20)
     min_lr     = trial.suggest_float("scheduler_min_lr", 1e-7, 1e-4, log=True)
 
+    # Apply overrides based on suggested values
     overrides = [
         f"train.optimizer.lr={lr}",
         f"train.optimizer.weight_decay={wd}",
         f"model.decoder.lora_rank={lora_rank}",
-        # scheduler-parameters
         f"train.scheduler.factor={factor}",
         f"train.scheduler.patience={patience}",
         f"train.scheduler.min_lr={min_lr}",
     ]
 
+    # Run training with these overrides
     return pl_one_run(config_path, overrides, trial=trial, **cli)
 
 
-# CLI / entry-point
+# CLI entry point using click
 @click.command()
 @click.argument("config_path", type=click.Path(exists=True))
 @click.option("--n-trials", type=int, default=20)
@@ -200,13 +221,16 @@ def objective(trial: optuna.Trial, config_path: str, **cli) -> float:
 @click.option("--n-jobs", type=int, default=1,
               help="Parallel Optuna trials – set CUDA_VISIBLE_DEVICES accordingly.")
 def main(**cli):
+    # Ensure multiprocessing works properly
     mp.set_start_method("spawn", force=True)
 
+    # Create a new Optuna study
     study = optuna.create_study(
         direction="minimize",
         pruner=optuna.pruners.MedianPruner(n_warmup_steps=2),
     )
 
+    # Run the optimization process
     study.optimize(
         lambda t: objective(t, **cli),
         n_trials=cli.pop("n_trials"),
@@ -214,9 +238,11 @@ def main(**cli):
         show_progress_bar=True,
     )
 
+    # Print best result
     best = study.best_trial
     print("\nBest val/loss =", best.value)
     print(json.dumps(best.params, indent=2))
 
+# Entry point
 if __name__ == "__main__":
     main()

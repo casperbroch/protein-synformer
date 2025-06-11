@@ -11,9 +11,7 @@ class ProteinEncoder(BaseEncoder):
                  d_protein: int = 1152):
         super().__init__()
         self._dim = d_model 
-        # Our protein embeddings have 1152 dimensions, but the decoder (trained weights) expects 768 dimensions,
-        # so we use a linear layer to project them down to 768 dimensions.
-        # TODO: experiment whether more complex projection is better
+        # Project protein embeddings from d_protein (e.g. 1152) to d_model (e.g. 512 or 768)
         self.enc = nn.Linear(d_protein, d_model) 
 
     @property
@@ -21,15 +19,24 @@ class ProteinEncoder(BaseEncoder):
         return self._dim
     
     def forward(self, batch: ProjectionBatch):
+        # Ensure protein embeddings are in the batch
         if "protein_embeddings" not in batch:
             raise ValueError("protein_embeddings must be in batch")
+        
+        # Get device from any tensor in the batch
         for v in batch.values():
             if isinstance(v, torch.Tensor):
                 device = v.device
                 break
-        protein_embeddings = batch["protein_embeddings"]  # (batch_size, protein_seq_len, d_protein)
+
+        # Shape: (batch_size, seq_len, d_protein)
+        protein_embeddings = batch["protein_embeddings"]
+
+        # Project to (batch_size, seq_len, d_model)
         code = self.enc(protein_embeddings)
-        # bsz = code.size(0)  # batch size 
-        # code_padding_mask = torch.zeros([bsz, 0], dtype=torch.bool, device=device)
+
+        # No padding mask used here
         code_padding_mask = None
+
+        # Return encoded output
         return EncoderOutput(code, code_padding_mask)
