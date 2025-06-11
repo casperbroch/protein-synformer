@@ -59,7 +59,10 @@ def sum_weighted_losses(losses: dict[str, torch.Tensor], weights: dict[str, floa
 
 
 def worker_init_fn(worker_id: int):
-    os.sched_setaffinity(0, range(os.cpu_count() or 1))
+    try:
+        os.sched_setaffinity(0, range(os.cpu_count() or 1))
+    except AttributeError:
+        pass
     global_rank = rank_zero_only.rank
     process_seed = torch.initial_seed()
 

@@ -5,20 +5,33 @@ import torch.nn.functional as F
 
 
 def collate_tokens(features: Sequence[torch.Tensor], max_size: int) -> torch.Tensor:
-    features_padded = [F.pad(f, pad=[0, max_size - f.size(-1)], mode="constant", value=0) for f in features]
+    features_padded = [
+        F.pad(f, pad=[0, max_size - f.size(-1)], mode="constant", value=0) 
+        for f in features
+    ]
     return torch.stack(features_padded, dim=0)
 
 
 def collate_2d_tokens(features: Sequence[torch.Tensor], max_size: int) -> torch.Tensor:
     features_padded = [
-        F.pad(f, pad=[0, max_size - f.size(-1), 0, max_size - f.size(-2)], mode="constant", value=0) for f in features
+        F.pad(f, pad=[0, max_size - f.size(-1), 0, max_size - f.size(-2)], mode="constant", value=0) 
+        for f in features
     ]
     return torch.stack(features_padded, dim=0)
 
 
-def collate_1d_features(features: Sequence[torch.Tensor], max_size: int) -> torch.Tensor:
-    features_padded = [F.pad(f, pad=[0, 0, 0, max_size - f.size(-2)], mode="constant", value=0) for f in features]
-    return torch.stack(features_padded, dim=0)
+def collate_1d_features(features: Sequence[torch.Tensor], max_size: int, pad_val: int = 0) -> torch.Tensor:
+    device = features[0].device
+    # dtype  = features[0].dtype
+    padded = []
+    for f in features:
+        if f.device != device:
+            f = f.to(device)  # unify devices
+        pad_len = max_size - f.size(-2)
+        if pad_len > 0:
+            f = F.pad(f, pad=[0, 0, 0, pad_len], mode="constant", value=pad_val)  # last two dims
+        padded.append(f)
+    return torch.stack(padded, dim=0)
 
 
 def collate_2d_features(features: Sequence[torch.Tensor], max_size: int) -> torch.Tensor:

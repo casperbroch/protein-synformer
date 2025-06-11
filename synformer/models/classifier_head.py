@@ -27,7 +27,7 @@ class ClassifierHead(nn.Module):
     def get_loss(self, h: torch.Tensor, target: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
         logits = self.predict(h)
         logits_flat = logits.view(-1, logits.size(-1))
-        target_flat = target.view(-1)
+        target_flat = target.view(-1).long()
         if mask is not None:
             mask_flat = mask.view(-1)
             total = mask_flat.sum().to(logits_flat) + 1e-6

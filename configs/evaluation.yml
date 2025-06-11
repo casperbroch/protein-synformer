@@ -1,0 +1,6 @@
+system:
+  device: gpu 
+data:
+  protein_molecule_pairs_path: data/protein_molecule_pairs/papyrus_test_19399.csv
+  protein_embeddings_path: data/protein_embeddings/embeddings_selection_float16_4973.pth
+  synthetic_pathways_path: data/synthetic_pathways/filtered_pathways_370000.pth

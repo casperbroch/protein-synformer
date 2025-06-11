@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 from pytorch_lightning import callbacks, loggers, strategies
 
 from synformer.data.projection_dataset_new import ProjectionDataModule
+from synformer.chem.mol import FingerprintOption
 from synformer.models.wrapper import SynformerWrapper
 from synformer.utils.misc import (
     get_config_name,
@@ -62,6 +63,7 @@ def main(
         config,
         batch_size=batch_size_per_process,
         num_workers=num_workers,
+        fp_option=FingerprintOption(**config.chem.fp_option),
         **config.data,
     )
 
