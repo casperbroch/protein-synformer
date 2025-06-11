@@ -1,6 +1,6 @@
-# Prot2Drug‑SynFormer
+# Protein-Synformer
 
-\*A protein‑conditioned fork of \****SynFormer***
+A protein‑conditioned fork of **SynFormer**
 Generative modelling and synthesis‑planning for drug discovery.
 
 ---
